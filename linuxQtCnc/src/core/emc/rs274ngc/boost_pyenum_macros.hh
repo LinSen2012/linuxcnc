@@ -13,9 +13,12 @@
 
 #ifndef BOOST_PYENUM_MACROS_HH
 #define BOOST_PYENUM_MACROS_HH
+#if 0 // Python disabled - Boost.Python macros not needed
+
 #include <boost/python/enum.hpp>
 
 #define BOOST_PYENUM_VAL(X) value(#X, X)
 #define BOOST_PYENUM_(X) enum_<X>(#X)
 
+#endif // Python disabled
 #endif // BOOST_PYENUM_MACROS_HH

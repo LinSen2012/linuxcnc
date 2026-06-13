@@ -13,11 +13,8 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
-#define BOOST_PYTHON_MAX_ARITY 4
-#include "pythonplugin/python_plugin.hh"
-#include "interp_python.hh"
-#include <boost/python/list.hpp>
-namespace bp = boost::python;
+#include "pythonplugin/python_plugin_stub.hh"
+#include "interp_python_stub.hh"
 
 #include <unistd.h>
 #include <stdio.h>
@@ -109,7 +106,9 @@ int Interp::convert_remapped_code(block_pointer /*block*/,
     char key[2];
     int status;
     block_pointer cblock;
+#if 0 // Python disabled - boost::python code (unused variable)
     bp::list plist;
+#endif
     char cmd[LINELEN];
 
     if (number == -1)
@@ -263,6 +262,7 @@ int Interp::add_parameters(setup_pointer settings,
     auto STORE
     {
         [&](const char* name, double value) -> void {
+#if 0 // Python disabled - boost::python code
             if (pydict) {
                 try {
                     active_frame->pystuff.impl->kwargs[name] = value;
@@ -275,6 +275,7 @@ int Interp::add_parameters(setup_pointer settings,
                     return;
                 }
             }
+#endif
             if (posarglist) {
                 char actual[LINELEN];
                 snprintf(actual, sizeof(actual), "[%.4lf]", value);

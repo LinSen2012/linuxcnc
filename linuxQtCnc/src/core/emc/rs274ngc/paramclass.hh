@@ -18,6 +18,8 @@
 
 #ifndef PARAM_CLASS_HH
 #define PARAM_CLASS_HH
+#if 0 // Python disabled - Boost.Python bindings not needed
+
 #include "interp_fwd.hh"
 
 #ifndef BOOST_PYTHON_MAX_ARITY
@@ -41,4 +43,5 @@ struct ParamClass {
 
 extern void export_ParamClass();
 
+#endif // Python disabled
 #endif

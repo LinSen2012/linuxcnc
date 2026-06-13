@@ -40,7 +40,7 @@
 #include <hal.h>		/* HAL public API decls */
 #include <gpiod.h>
 #include <string.h>
-#include "config.h"             /* includes the GPIOD version 105 = 1.5 */
+#include <config.h>             /* includes the GPIOD version 105 = 1.5 */
 #if LIBGPIOD_VER >= 200
     #include <sys/stat.h>	/* to avoid following symlinks in /dev */
     #include <dirent.h>		/* to query entries in /dev */

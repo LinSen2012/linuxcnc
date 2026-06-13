@@ -18,19 +18,13 @@
 * Last change: Juli 2011
 ********************************************************************/
 
-#include "config.h"
+#include <config.h>
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
 
-#define BOOST_PYTHON_MAX_ARITY 4
-#include "pythonplugin/python_plugin.hh"
-#include <boost/python/dict.hpp>
-#include <boost/python/extract.hpp>
-#include <boost/python/list.hpp>
-#include <boost/python/tuple.hpp>
-namespace bp = boost::python;
+#include "pythonplugin/python_plugin_stub.hh"
 
 #include <unistd.h>
 #include <stdio.h>
@@ -362,6 +356,7 @@ int Interp::find_named_param(
 	  CHP(lookup_named_param(nameBuf, pv->value, value));
 	  *status = 1;
       } else if (pv->attr & PA_PYTHON) {
+#if 0 // Python disabled - boost::python code
 	  bp::object retval, tupleargs, kwargs;
 	  bp::list plist;
 
@@ -398,6 +393,7 @@ int Interp::find_named_param(
 	      NAMEDPARAMS_MODULE, nameBuf,
           PyUnicode_AsUTF8(res_str),
 	      retval.ptr()->ob_type->tp_name);
+#endif // Python disabled
       } else {
 	  *value = pv->value;
 	  *status = 1;

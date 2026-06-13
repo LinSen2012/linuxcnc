@@ -13,7 +13,7 @@
 * Last change:
 ********************************************************************/
 
-#include "config.h"
+#include <config.h>
 #include "emcglb.h"		/* these decls */
 #include "emccfg.h"		/* their initial values */
 #include <emcpos.h>		/* EmcPose */

@@ -23,8 +23,7 @@
 #include <bitset>
 #include "nml_intf/canon.hh"
 #include <emcpos.h>
-#include "libintl.h"
-#include <boost/python/object_fwd.hpp>
+#include <libintl.h>
 #include <cmath>
 #include <rtapi_string.h>	// rtapi_strlcpy()
 #include "interp_parameter_def.hh"
@@ -845,7 +844,7 @@ struct setup
 #define FEATURE_NO_DOWNCASE_OWORD    0x00000010
 #define FEATURE_OWORD_WARNONLY       0x00000020
 
-    boost::python::object *pythis;  // boost::cref to 'this'
+    void *pythis;  // Python disabled: always nullptr
     const char *on_abort_command;
     int_remap_map  g_remapped,m_remapped;
     remap_map remaps;

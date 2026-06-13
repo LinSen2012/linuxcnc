@@ -35,7 +35,7 @@
 #include <sys/types.h>
 #endif
 #include "classicladder.h"
-#include "config.h"
+#include <config.h>
 #include "global.h"
 #include "edit.h"
 #include "calc.h"

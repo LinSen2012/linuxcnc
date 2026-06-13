@@ -1,4 +1,4 @@
-#include "config.h"
+#include <config.h>
 #if defined(RTAPI_RTAI)
 // These should use kstrtol etc really but the endptrs are used on return
 long strtol(char *ptr, char **endptr, int base){

@@ -1,0 +1,46 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+// Package info
+#define PACKAGE_NAME "linuxQtCnc"
+#define PACKAGE_VERSION "@PROJECT_VERSION@"
+#define PACKAGE_STRING "@PROJECT_NAME@ @PROJECT_VERSION@"
+#define PACKAGE_TARNAME "@PROJECT_NAME@"
+
+// Build mode - always ULAPI (user-space) for linuxQtCnc
+#define RTAPI_USPACE 1
+#define ULAPI 1
+
+// Paths - use CMake-detected paths
+#define EMC2_HOME "@CMAKE_INSTALL_PREFIX@"
+#define EMC2_BIN_DIR "@CMAKE_INSTALL_PREFIX@/bin"
+#define EMC2_RTLIB_DIR "@CMAKE_INSTALL_PREFIX@/lib/linuxcnc/rtlib"
+#define EMC2_PO_DIR "@CMAKE_INSTALL_PREFIX@/share/locale"
+#define EMC2_TMP_DIR "/tmp/linuxcnc"
+#define EMC2_NCFILES_DIR "@CMAKE_INSTALL_PREFIX@/share/linuxcnc/ncfiles"
+#define EMC2_DEFAULT_NMLFILE "@CMAKE_INSTALL_PREFIX@/etc/linuxcnc/default.nml"
+#define EMC2_DEFAULT_TOOLTABLE "@CMAKE_INSTALL_PREFIX@/share/linuxcnc/tool.tbl"
+
+// Module extension
+#define MODULE_EXT ".so"
+
+// Runtime directory
+#define RTDIR "/dev"
+
+// Feature detection - these will be set by CMake checks
+#cmakedefine01 HAVE_SYS_IO_H
+#cmakedefine01 HAVE_CLOCK_NANOSLEEP
+#cmakedefine01 HAVE_SEMTIMEDOP
+#cmakedefine01 HAVE_OPTRESET
+#cmakedefine01 HAVE_LOCALE_H
+#cmakedefine01 HAVE_LIBINTL_H
+#cmakedefine01 HAVE_SETLOCALE
+#cmakedefine01 HIDRAW_H_USABLE
+#cmakedefine01 LIBGPIOD_VER
+#cmakedefine01 HAVE_DLFCN_H
+
+// Always define for Linux
+#define LIBDL 1
+#define _GNU_SOURCE 1
+
+#endif // CONFIG_H

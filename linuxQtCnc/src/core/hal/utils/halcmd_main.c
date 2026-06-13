@@ -37,7 +37,7 @@
  *  information, go to www.linuxcnc.org.
  */
 
-#include "config.h"
+#include <config.h>
 #include <rtapi.h>
 #include <rtapi_mutex.h>
 #include <hal.h>

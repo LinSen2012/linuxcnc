@@ -39,7 +39,7 @@ static msg_level_t msg_level = RTAPI_MSG_ERR;	/* message printing level */
 /* These structs hold data associated with objects like tasks, etc. */
 /* Task handles are pointers to these structs.                      */
 
-#include "config.h"
+#include <config.h>
 
 #ifdef RTAPI
 #include "uspace_rtapi_app.hh"

@@ -65,14 +65,7 @@ suppression can produce more concise output. Future versions might
 include an option for suppressing superfluous commands.
 
 ****************************************************************************/
-#define BOOST_PYTHON_MAX_ARITY 4
-#include "pythonplugin/python_plugin.hh"
-#include <boost/python/dict.hpp>
-#include <boost/python/extract.hpp>
-#include <boost/python/import.hpp>
-#include <boost/python/list.hpp>
-#include <boost/python/scope.hpp>
-#include <boost/python/tuple.hpp>
+#include "pythonplugin/python_plugin_stub.hh"
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -107,7 +100,8 @@ include an option for suppressing superfluous commands.
 using namespace interp_param_global;
 using namespace linuxcnc;
 
-namespace bp = boost::python;
+// Python disabled - namespace bp removed
+// namespace bp = boost::python;
 
 extern char * _rs274ngc_errors[];
 
@@ -133,14 +127,15 @@ Interp::Interp()
 {
     _setup.init_once = 1;  
   init_named_parameters();  // need this before Python init.
- 
-  if (!PythonPlugin::instantiate(builtin_modules)) {  // factory
-    Error("Interp ctor: can\'t instantiate Python plugin");
-    return;
-  }
+
+  // Python disabled - PythonPlugin instantiation and interpreter module init skipped
+  // if (!PythonPlugin::instantiate(builtin_modules)) {  // factory
+  //   Error("Interp ctor: can\'t instantiate Python plugin");
+  //   return;
+  // }
 
 // KLUDGE just to get unit tests to stop complaining about python modules we won't use anyway
-#ifndef UNIT_TEST
+#if 0 // Python disabled
   try {
     // this import will register the C++->Python converter for Interp
     bp::object interp_module = bp::import("interpreter");
@@ -171,6 +166,7 @@ Interp::Interp()
     PyErr_Clear();
     Error("PYTHON: exception during 'this' export:\n%s\n",exception_msg.c_str());
   }
+#endif
 #endif
 }
 
@@ -783,6 +779,7 @@ int Interp::exit()
   reset();
 
   // interpreter shutdown Python hook
+#if 0 // Python disabled
   if (python_plugin->is_callable(NULL, DELETE_FUNC)) {
 
       bp::object retval, tupleargs, kwargs;
@@ -800,6 +797,7 @@ int Interp::exit()
 	  fprintf(stderr, "%s\n",savedError);
       }
   }
+#endif
 
   return INTERP_OK;
 }
@@ -1027,12 +1025,14 @@ int Interp::init()
           }
 
           // initialize the Python plugin singleton
+#if 0 // Python disabled
           if (inifile.isSet("TOPLEVEL", "PYTHON")) {
               int status = python_plugin->configure(iniFileName,"PYTHON");
               if (status != PLUGIN_OK) {
                   Error("Python plugin configure() failed, status = %d", status);
               }
           }
+#endif
  
 	  int n = 1;
 	  _setup.g_remapped.clear();
@@ -1252,6 +1252,7 @@ int Interp::init()
 
   // call __init__(self) once in toplevel module if defined
   // once fully set up and sync()ed
+#if 0 // Python disabled
   if ((iniFileName != NULL) && _setup.init_once && PYUSABLE ) {
 
       // initialize any python global predefined named parameters
@@ -1297,6 +1298,7 @@ int Interp::init()
 	       python_plugin->last_exception().c_str());
       }
   }
+#endif
   _setup.init_once = 0;
 
   return INTERP_OK;

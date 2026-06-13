@@ -14,7 +14,7 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
-#include "config.h"
+#include <config.h>
 #include "rtapi.h"
 #include "uspace_rtapi_app.hh"
 #include <pthread.h>

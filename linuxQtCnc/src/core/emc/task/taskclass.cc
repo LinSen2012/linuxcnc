@@ -24,7 +24,7 @@
 #include "libnml/os_intf/timer.hh"             // esleep, etc.
 #include "nml_intf/emcglb.h"		// EMC_INIFILE
 
-#include "pythonplugin/python_plugin.hh"
+#include "pythonplugin/python_plugin_stub.hh"
 #include "taskclass.hh"
 #include <rtapi_string.h>
 
@@ -118,6 +118,7 @@ int emcTaskOnce(const char * /*filename*/, EMC_IO_STAT &emcioStatus)
 }
 
 
+#if 0
 extern "C" PyObject* PyInit_interpreter(void);
 extern "C" PyObject* PyInit_emccanon(void);
 struct _inittab builtin_modules[] = {
@@ -126,6 +127,7 @@ struct _inittab builtin_modules[] = {
     // any others...
     { NULL, NULL }
 };
+#endif
 
 Task::Task(EMC_IO_STAT & emcioStatus_in) :
     emcioStatus(emcioStatus_in),

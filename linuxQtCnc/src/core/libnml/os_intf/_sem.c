@@ -12,7 +12,7 @@
 * Last change: 
 ********************************************************************/
 
-#include "config.h"
+#include <config.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>		/* errno */

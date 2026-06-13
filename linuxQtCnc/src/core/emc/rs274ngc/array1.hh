@@ -5,6 +5,7 @@
 
 #ifndef __array_1_pyplusplus_hpp__
 #define __array_1_pyplusplus_hpp__
+#if 0 // Python disabled - Boost.Python array wrappers not needed
 
 #ifndef BOOST_PYTHON_MAX_ARITY
 #define BOOST_PYTHON_MAX_ARITY 4
@@ -34,7 +35,7 @@ namespace details{
 
 template<class T>
 struct is_immutable{
-    enum { value = 
+    enum { value =
         ( std::is_same< T, std::string >::value )
                   || ( std::is_same< T, std::wstring >::value )
                   || ( std::is_fundamental< T >::value )
@@ -180,3 +181,4 @@ struct register_array_1{
 
 
 #endif//__array_1_pyplusplus_hpp__
+#endif // Python disabled

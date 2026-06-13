@@ -195,7 +195,7 @@ setup::setup() :
     center_z(0.0),
     normal_heading(0.0),
     iscircle(false),
-    pythis(),
+    pythis(nullptr),
     on_abort_command(NULL),
     init_once(CANON_STOPPED)
 {
@@ -203,6 +203,6 @@ setup::setup() :
 }
 
 setup::~setup() {
-    assert(!pythis || Py_IsInitialized());
-    if(pythis) delete pythis;
+    // Python disabled: pythis is always nullptr
+    // Python disabled: no pythis cleanup needed
 }

@@ -12,10 +12,6 @@
 *
 ********************************************************************/
 
-#define BOOST_PYTHON_MAX_ARITY 4
-#include <boost/python/list.hpp>
-#include <boost/python/tuple.hpp>
-#include <boost/python/dict.hpp>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,11 +28,9 @@
 #include "nml_intf/interp_return.hh"
 #include "interp_internal.hh"
 #include "rs274ngc_interp.hh"
-#include "pythonplugin/python_plugin.hh"
-#include "interp_python.hh"
+#include "pythonplugin/python_plugin_stub.hh"
+#include "interp_python_stub.hh"
 #include <rtapi_string.h>	// rtapi_strlcpy()
-
-namespace bp = boost::python;
 
 //========================================================================
 // Functions for control stuff (O-words)
@@ -186,7 +180,9 @@ int Interp::execute_call(setup_pointer settings,
 {
     int status = INTERP_OK;
     int i;
+#if 0 // Python disabled - boost::python code
     bp::list plist;
+#endif
 
     context_pointer previous_frame = &settings->sub_context[settings->call_level-1];
 
@@ -282,6 +278,7 @@ int Interp::execute_call(setup_pointer settings,
 
 	break;
 
+#if 0 // Python disabled - entire CT_PYTHON_OWORD_SUB case uses boost::python
     case CT_PYTHON_OWORD_SUB:
 	switch (settings->call_state) {
 	case CS_NORMAL:
@@ -316,6 +313,7 @@ int Interp::execute_call(setup_pointer settings,
 	    break;
 	}
 	break;
+#endif // Python disabled
 
     case CT_REMAP:
 	block_pointer cblock = &CONTROLLING_BLOCK(*settings);
@@ -326,9 +324,11 @@ int Interp::execute_call(setup_pointer settings,
 	    if (remap->remap_py || remap->prolog_func || remap->epilog_func) {
 		CHKS(!PYUSABLE, "%s (remapped) uses Python functions, but the Python plugin is not available", 
 		     remap->name);
+#if 0 // Python disabled - boost::python code
 		plist.append(*settings->pythis);   //self
 		current_frame->pystuff.impl->tupleargs = bp::tuple(plist);
 		current_frame->pystuff.impl->kwargs = bp::dict();
+#endif
 	    }
 	    if (remap->argspec && (strchr(remap->argspec, '@') == NULL)) {
 		// add_parameters will decorate kwargs as per argspec

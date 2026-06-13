@@ -42,7 +42,7 @@
     information, go to www.linuxcnc.org.
 */
 
-#include "config.h"
+#include <config.h>
 #include <linuxcnc.h>
 
 #ifndef NO_INI

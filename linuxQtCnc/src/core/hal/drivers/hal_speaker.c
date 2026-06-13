@@ -61,7 +61,7 @@
     information, go to www.linuxcnc.org.
 */
 
-#include "config.h"     /* environment flags */
+#include <config.h>     /* environment flags */
 #include <rtapi.h>		/* RTAPI realtime OS API */
 #include <rtapi_app.h>		/* RTAPI realtime module decls */
 #include <rtapi_io.h>

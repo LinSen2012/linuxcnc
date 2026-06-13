@@ -68,7 +68,7 @@
 fpu_control_t __fpu_control = _FPU_IEEE & ~(_FPU_MASK_IM | _FPU_MASK_ZM | _FPU_MASK_OM);
 #endif
 
-#include "config.h"
+#include <config.h>
 #include "libnml/rcs/rcs.hh"		// NML classes, nmlErrorFormat()
 #include "nml_intf/emc.hh"		// EMC NML
 #include "nml_intf/emc_nml.hh"

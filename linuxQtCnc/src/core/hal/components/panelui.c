@@ -70,8 +70,11 @@
     This code was written as part of the LinuxCNC HAL project.  For more
     information, go to www.linuxcnc.org.
 */
+#if 0
+// Disabled: Python dependency removed
 #include <Python.h>
 #include <pyconfig.h>
+#endif
 #include <time.h>
 
 #include <stdio.h>
