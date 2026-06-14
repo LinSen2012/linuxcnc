@@ -22,6 +22,13 @@
 #include "LcncStatusData.h"
 #include "LcncCommand.h"
 
+// ============================================================================
+// 常量定义
+// ============================================================================
+
+/// 最大支持轴数
+#define MAX_DRO_AXES 9
+
 class LcncCore : public QObject
 {
     Q_OBJECT

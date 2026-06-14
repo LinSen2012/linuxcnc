@@ -12,6 +12,7 @@
 #include <QDateTime>
 #include <QTimer>
 #include <cmath>
+#include <algorithm>
 
 // ============================================================================
 // Linux NML 头文件（仅在 Linux 下编译）
@@ -330,62 +331,130 @@ void LcncCore::mapEmcStatToLcnc(const void *raw)
     }
 
     // 解释器状态
-    switch (s->interp_state) {
-    case EMC_INTERP_IDLE: m_status.interpState = InterpState::IDLE; break;
-    case EMC_INTERP_READING: m_status.interpState = InterpState::RUNNING; break;
-    case EMC_INTERP_WAITING: m_status.interpState = InterpState::RUNNING; break;
-    case EMC_INTERP_PAUSED: m_status.interpState = InterpState::PAUSED; break;
+    switch (s->task.interpState) {
+    case EMC_TASK_INTERP_IDLE: m_status.interpState = InterpState::IDLE; break;
+    case EMC_TASK_INTERP_READING: m_status.interpState = InterpState::RUNNING; break;
+    case EMC_TASK_INTERP_WAITING: m_status.interpState = InterpState::RUNNING; break;
+    case EMC_TASK_INTERP_PAUSED: m_status.interpState = InterpState::PAUSED; break;
     default: m_status.interpState = InterpState::IDLE; break;
     }
 
-    // 位置数据
-    int axes = std::min(static_cast<int>(s->motion.traj.axes), 9);
-    for (int i = 0; i < axes; ++i) {
-        if (i < MAX_DRO_AXES) {
-            m_status.axes[i].position = s->motion.traj.position[i];
-            m_status.axes[i].velocity = s->motion.traj.velocity;
-            m_status.axes[i].enabled = (s->motion.traj.axis_mask & (1 << i));
-            m_status.axes[i].minPosition = s->motion.traj.min_position_limit[i];
-            m_status.axes[i].maxPosition = s->motion.traj.max_position_limit[i];
+    // 位置数据 - 从 EMC_TRAJ_STAT 和 EMC_JOINT_STAT 读取
+    int joints = std::min(static_cast<int>(s->motion.traj.joints), 9);
+    for (int i = 0; i < joints && i < MAX_DRO_AXES; ++i) {
+        m_status.axes[i].position = s->motion.joint[i].input;
+        m_status.axes[i].velocity = s->motion.joint[i].velocity;
+        m_status.axes[i].enabled = s->motion.joint[i].enabled;
+        m_status.axes[i].minPosition = s->motion.joint[i].minPositionLimit;
+        m_status.axes[i].maxPosition = s->motion.joint[i].maxPositionLimit;
+
+        // 限位状态
+        if (s->motion.joint[i].minHardLimit || s->motion.joint[i].minSoftLimit) {
+            m_status.axes[i].limitState = LimitState::MIN_LIMIT;
+        } else if (s->motion.joint[i].maxHardLimit || s->motion.joint[i].maxSoftLimit) {
+            m_status.axes[i].limitState = LimitState::MAX_LIMIT;
+        } else {
+            m_status.axes[i].limitState = LimitState::NONE;
         }
+
+        // 回零状态
+        if (s->motion.joint[i].homing) {
+            m_status.axes[i].homingState = HomingState::HOMING;
+        } else if (s->motion.joint[i].homed) {
+            m_status.axes[i].homingState = HomingState::HOMED;
+        } else {
+            m_status.axes[i].homingState = HomingState::IDLE;
+        }
+
+        // 故障状态
+        m_status.axes[i].fault = s->motion.joint[i].fault;
     }
 
-    // XYZ 位置快捷访问
-    m_status.absolutePos.x = (axes > 0) ? s->motion.traj.position[0] : 0.0;
-    m_status.absolutePos.y = (axes > 1) ? s->motion.traj.position[1] : 0.0;
-    m_status.absolutePos.z = (axes > 2) ? s->motion.traj.position[2] : 0.0;
+    // XYZ 位置快捷访问（从 EmcPose 的 tran 成员访问）
+    m_status.absolutePos.x = s->motion.traj.position.tran.x;
+    m_status.absolutePos.y = s->motion.traj.position.tran.y;
+    m_status.absolutePos.z = s->motion.traj.position.tran.z;
+    m_status.absolutePos.a = s->motion.traj.position.a;
+    m_status.absolutePos.b = s->motion.traj.position.b;
+    m_status.absolutePos.c = s->motion.traj.position.c;
 
-    // 主轴
-    if (s->motion.spindle[0].spindle_speed > 0) {
+    // 相对坐标 = 绝对坐标 - 工件偏置
+    m_status.relativePos.x = m_status.absolutePos.x - s->task.g5x_offset.tran.x - s->task.g92_offset.tran.x;
+    m_status.relativePos.y = m_status.absolutePos.y - s->task.g5x_offset.tran.y - s->task.g92_offset.tran.y;
+    m_status.relativePos.z = m_status.absolutePos.z - s->task.g5x_offset.tran.z - s->task.g92_offset.tran.z;
+
+    // 工件坐标系位置
+    m_status.workPos = m_status.relativePos;
+
+    // 距离目标点
+    m_status.distanceToGo.tran.x = s->motion.traj.dtg.tran.x;
+    m_status.distanceToGo.tran.y = s->motion.traj.dtg.tran.y;
+    m_status.distanceToGo.tran.z = s->motion.traj.dtg.tran.z;
+
+    // 主轴状态
+    if (s->motion.spindle[0].speed > 0) {
         m_status.spindleState = SpindleState::FORWARD;
-        m_status.spindleSpeed = s->motion.spindle[0].spindle_speed;
-    } else if (s->motion.spindle[0].spindle_speed < 0) {
+        m_status.spindleSpeed = s->motion.spindle[0].speed;
+    } else if (s->motion.spindle[0].speed < 0) {
         m_status.spindleState = SpindleState::REVERSE;
-        m_status.spindleSpeed = -s->motion.spindle[0].spindle_speed;
+        m_status.spindleSpeed = -s->motion.spindle[0].speed;
     } else {
         m_status.spindleState = SpindleState::STOPPED;
         m_status.spindleSpeed = 0.0;
     }
 
     // 进给倍率
-    m_status.feedOverride = s->motion.traj.scale / 100.0;
-    m_status.spindleOverride = s->motion.spindle[0].spindle_override / 100.0;
+    m_status.feedOverride = s->motion.traj.scale;
+    m_status.spindleOverride = s->motion.spindle[0].spindle_scale;
 
-    // 当前刀具
-    m_status.toolInSpindle = s->io.tool.tool_in_spindle;
-
-    // 回零状态
-    for (int i = 0; i < axes && i < MAX_DRO_AXES; ++i) {
-        switch (s->motion.joint[i].homing_state) {
-        case 1: m_status.axes[i].homingState = HomingState::HOMING; break;
-        case 2: m_status.axes[i].homingState = HomingState::HOMED; break;
-        default: m_status.axes[i].homingState = HomingState::UNHOMED; break;
-        }
+    // 进给速率（从 activeSettings）
+    if (s->task.activeSettings[0] > 0) {
+        m_status.feedrate = s->task.activeSettings[0];
     }
 
-    // 程序行号
-    m_status.currentLine = s->task.callLevel > 0 ? s->task.line : 0;
-    m_status.programLine = s->task.activeLine;
+    // 当前刀具
+    m_status.toolInSpindle = s->io.tool.toolInSpindle;
+
+    // 刀具偏置
+    m_status.currentTool.xOffset = s->task.toolOffset.tran.x;
+    m_status.currentTool.yOffset = s->task.toolOffset.tran.y;
+    m_status.currentTool.zOffset = s->task.toolOffset.tran.z;
+    m_status.currentTool.a = s->task.toolOffset.a;
+    m_status.currentTool.b = s->task.toolOffset.b;
+    m_status.currentTool.c = s->task.toolOffset.c;
+
+    // G5x 偏置（G54-G59.3）
+    m_status.g5xOffset.tran.x = s->task.g5x_offset.tran.x;
+    m_status.g5xOffset.tran.y = s->task.g5x_offset.tran.y;
+    m_status.g5xOffset.tran.z = s->task.g5x_offset.tran.z;
+    m_status.g5xIndex = s->task.g5x_index;
+
+    // G92 偏置
+    m_status.g92Offset.tran.x = s->task.g92_offset.tran.x;
+    m_status.g92Offset.tran.y = s->task.g92_offset.tran.y;
+    m_status.g92Offset.tran.z = s->task.g92_offset.tran.z;
+
+    // 程序信息
+    m_status.currentLine = s->task.currentLine;
+    m_status.programLine = s->task.readLine;
+
+    // 当前 G 代码文件
+    if (s->task.file[0] != '\0') {
+        m_status.currentFile = QString::fromLocal8Bit(s->task.file);
+    }
+
+    // 当前活动的 G 代码
+    m_status.activeGCodesData.codes.clear();
+    for (int i = 0; i < 16 && s->task.activeGCodes[i] != -1; ++i) {
+        m_status.activeGCodesData.codes.append(s->task.activeGCodes[i]);
+    }
+
+    // 冷却液状态
+    m_status.coolantMist = (s->io.coolant.mist != 0);
+    m_status.coolantFlood = (s->io.coolant.flood != 0);
+
+    // 连接状态
+    m_status.connected = true;
 }
 #endif
 

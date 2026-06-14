@@ -245,9 +245,12 @@ public:
 
     // ----- 坐标位置 -----
     LcncPose absolutePos;    ///< 绝对坐标（机床坐标系）
-    LcncPose relativePos;    ///< 相对坐标
-    LcncPose workPos;        ///< 工件坐标系位置
-    LcncPose distanceToGo;    ///< 距目标点距离
+    LcncPose relativePos;   ///< 相对坐标
+    LcncPose workPos;       ///< 工件坐标系位置
+    LcncPose distanceToGo; ///< 距目标点距离
+    LcncPose g5xOffset;     ///< G5x 工件偏置
+    LcncPose g92Offset;     ///< G92 偏置
+    int g5xIndex = 0;       ///< 当前工件坐标系索引 (1=G54, 2=G55, ...)
 
     // ----- 当前 G/M 代码 -----
     ActiveGCodes activeGCodesData;
@@ -260,6 +263,10 @@ public:
     // ----- 刀具信息 -----
     LcncToolData currentTool;  ///< 当前刀具
     int toolInSpindle = 0;     ///< 主轴中的刀具号
+
+    // ----- 冷却液状态 -----
+    bool coolantMist = false;  ///< 雾化冷却开启
+    bool coolantFlood = false; ///< 喷流冷却开启
 
     // ----- 轴状态 -----
     QVector<LcncAxisStatus> axes;  ///< 各轴状态（最多 9 轴）
