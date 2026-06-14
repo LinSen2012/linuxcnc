@@ -3,6 +3,10 @@ add_library(lqt_gui_widgets STATIC
     GCodeEditor.h GCodeEditor.cpp
     JogPanel.h JogPanel.cpp
     StatusBar.h StatusBar.cpp
+    HalMonitorWidget.h HalMonitorWidget.cpp
+    ScopeWidget.h ScopeWidget.cpp
+    ToolTableWidget.h ToolTableWidget.cpp
+    OffsetTableWidget.h OffsetTableWidget.cpp
 )
 target_include_directories(lqt_gui_widgets PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

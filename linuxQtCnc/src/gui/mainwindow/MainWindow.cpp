@@ -299,6 +299,12 @@ void MainWindow::setupConnections()
                 statusBar()->showMessage(tr("已加载: %1").arg(path), 3000);
             });
 
+    // G代码编辑器 MDI 命令 -> LcncCore
+    connect(m_gcodeEditor, &GCodeEditor::mdiCommandRequested,
+            this, [this](const QString &command) {
+                if (m_core) m_core->sendMdi(command);
+            });
+
     // 点动面板 -> LcncCore
     connect(m_jogPanel, &JogPanel::jogStopRequested,
             this, [this](int axis) {
@@ -346,14 +352,7 @@ void MainWindow::setupConnections()
                 if (m_core) m_core->sendCoolantMistOff();
             });
 
-    // DRO Widget -> 刀具路径视图（点击坐标跳转到位置）
-    connect(m_droWidget, &DROWidget::positionClicked,
-            this, [this](int axis, double position) {
-                Q_UNUSED(axis)
-                Q_UNUSED(position)
-                // 点击 DRO 时聚焦到当前位置
-                m_toolpathView->fitToView();
-            });
+    // DRO 视图通过 updateStatus 自动更新，无需额外连接
 }
 
 // ============================================================================
@@ -406,42 +405,35 @@ void MainWindow::onStatusUpdated()
     if (!st) return;
 
     // 更新 DRO
-    for (int i = 0; i < st->axisCount && i < MAX_DRO_AXES; ++i) {
-        m_droWidget->setPosition(i, st->positions[i], st->dtg[i]);
-        m_droWidget->setOffset(i, st->g5x_offset[i], st->g92_offset[i]);
-        m_droWidget->setHomePosition(i, st->homePosition[i]);
-        m_droWidget->setLimit(i, st->minLimit[i], st->maxLimit[i]);
-        m_droWidget->setOverride(i, st->overridePercent[i]);
-        m_droWidget->setHomed(i, st->homed[i]);
-    }
+    m_droWidget->updateStatus(*st);
 
     // 更新刀具路径视图中的当前位置
     m_toolpathView->updateToolPosition(QVector3D(
-        static_cast<float>(st->positions[0]),
-        static_cast<float>(st->positions[1]),
-        static_cast<float>(st->positions[2])));
+        static_cast<float>(st->absolutePos.x),
+        static_cast<float>(st->absolutePos.y),
+        static_cast<float>(st->absolutePos.z)));
 
     // 更新状态栏
-    m_statusBarWidget->updateFromStatus(st);
+    m_statusBarWidget->updateStatus(*st);
 
     // 更新模式
-    m_modeAutoAction->setChecked(st->motionMode == MotionModeAuto);
-    m_modeManualAction->setChecked(st->motionMode == MotionModeManual);
-    m_modeMdiAction->setChecked(st->motionMode == MotionModeMdi);
+    m_modeAutoAction->setChecked(st->motionMode == MotionMode::AUTO);
+    m_modeManualAction->setChecked(st->motionMode == MotionMode::MANUAL);
+    m_modeMdiAction->setChecked(st->motionMode == MotionMode::MDI);
 
     // 更新程序状态
-    m_programRunAction->setEnabled(st->taskState == TaskStateOn
-                                   && st->interpState == InterpIdle);
-    m_programPauseAction->setEnabled(st->interpState == InterpRunning);
-    m_programStopAction->setEnabled(st->interpState != InterpIdle);
+    m_programRunAction->setEnabled(st->taskState == MachineState::ON
+                                   && st->interpState == InterpState::IDLE);
+    m_programPauseAction->setEnabled(st->interpState == InterpState::RUNNING);
+    m_programStopAction->setEnabled(st->interpState != InterpState::IDLE);
 
     // 更新机床状态
-    bool machineOn = st->taskState == TaskStateOn;
+    bool machineOn = st->taskState == MachineState::ON;
     m_machineOnAction->setEnabled(!machineOn);
     m_machineOffAction->setEnabled(machineOn);
 
     // 急停状态
-    if (st->taskState == TaskStateEstop) {
+    if (st->taskState == MachineState::ESTOP) {
         m_estopAction->setEnabled(false); // 急停中不可再次触发
     } else {
         m_estopAction->setEnabled(true);
@@ -479,10 +471,8 @@ void MainWindow::onDisconnected()
     m_programStopAction->setEnabled(false);
 
     // 重置 DRO 到 0
-    for (int i = 0; i < MAX_DRO_AXES; ++i) {
-        m_droWidget->setPosition(i, 0.0, 0.0);
-        m_droWidget->setHomed(i, false);
-    }
+    LcncStatusData emptyStatus;
+    m_droWidget->updateStatus(emptyStatus);
 }
 
 void MainWindow::onError(const QString &message)
