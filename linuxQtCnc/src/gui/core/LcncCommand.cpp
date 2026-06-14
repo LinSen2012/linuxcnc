@@ -193,7 +193,7 @@ bool LcncCommand::modeMDI()
         return false;
     }
     EMC_TASK_SET_MODE emc_cmd;
-    emc_cmd.mode = EMC_TASK_MODE_MDI;
+    emc_cmd.mode = EMC_TASK_MODE::MDI;
     int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
     if (result != 0) {
         emit commandError(QStringLiteral("MODE_MDI"), QString("NML 写入失败: %1").arg(result));
@@ -239,8 +239,9 @@ bool LcncCommand::jogStop(int axis)
         emit commandError(QStringLiteral("JOG_STOP"), "NML 命令通道未初始化");
         return false;
     }
-    EMC_TRAJ_JOG_STOP emc_cmd;
-    emc_cmd.axis = axis;
+    EMC_JOG_STOP emc_cmd;
+    emc_cmd.joint_or_axis = axis;
+    emc_cmd.jjogmode = 0;
     int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
     if (result != 0) {
         emit commandError(QStringLiteral("JOG_STOP"), QString("NML 写入失败: %1").arg(result));
@@ -316,7 +317,7 @@ bool LcncCommand::programRun(int line)
         emit commandError(QStringLiteral("PROGRAM_RUN"), "NML 命令通道未初始化");
         return false;
     }
-    EMC_TASK_RUN emc_cmd;
+    EMC_TASK_PLAN_RUN emc_cmd;
     emc_cmd.line = line;
     int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
     if (result != 0) {
@@ -425,7 +426,7 @@ bool LcncCommand::mdi(const QString &command)
         emit commandError(QStringLiteral("MDI"), "NML 命令通道未初始化");
         return false;
     }
-    EMC_TASK_MDI emc_cmd;
+    EMC_TASK_PLAN_EXECUTE emc_cmd;
     // 复制命令字符串到命令结构
     strncpy(emc_cmd.command, command.toLocal8Bit().constData(), sizeof(emc_cmd.command) - 1);
     emc_cmd.command[sizeof(emc_cmd.command) - 1] = '\0';
@@ -452,12 +453,30 @@ bool LcncCommand::home(int axis)
         emit commandError(QStringLiteral("HOME"), "NML 命令通道未初始化");
         return false;
     }
-    EMC_TRAJ_HOME emc_cmd;
-    emc_cmd.axis = axis;
-    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
-    if (result != 0) {
-        emit commandError(QStringLiteral("HOME"), QString("NML 写入失败: %1").arg(result));
-        return false;
+    // 全部回零（axis == -1）时对每个关节发送；否则发送单关节回零
+    if (axis == -1) {
+        // 遍历所有轴（默认最多9轴）
+        bool ok = true;
+        for (int i = 0; i < 9; ++i) {
+            EMC_JOINT_HOME emc_cmd;
+            emc_cmd.joint = i;
+            if (static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd) != 0) {
+                ok = false;
+                break;
+            }
+        }
+        if (!ok) {
+            emit commandError(QStringLiteral("HOME"), "NML 写入失败");
+            return false;
+        }
+    } else {
+        EMC_JOINT_HOME emc_cmd;
+        emc_cmd.joint = axis;
+        int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+        if (result != 0) {
+            emit commandError(QStringLiteral("HOME"), QString("NML 写入失败: %1").arg(result));
+            return false;
+        }
     }
     qInfo().noquote() << "[LcncCommand] NML 发送: HOME axis=" << axis;
     return true;
@@ -894,21 +913,31 @@ bool LcncCommand::setWorkCoordinate(int axis, double value, int coordinateSystem
         emit commandError(QStringLiteral("SET_WORK_COORD"), "NML 命令通道未初始化");
         return false;
     }
-    EMC_TRAJ_SET_WORLD_OFFSET emc_cmd;
-    // 设置指定坐标系的指定轴偏移
+    EMC_TRAJ_SET_G5X emc_cmd;
     // coordinateSystem: 1=G54, 2=G55, ... 6=G59
     // axis: 0=X, 1=Y, 2=Z, 3=A, 4=B, 5=C
-    int coord_index = coordinateSystem - 1;  // 转为 0 基索引
-    if (coord_index < 0 || coord_index >= 6 || axis < 0 || axis > 5) {
+    int g5x_index = coordinateSystem - 1;  // 转为 0 基索引
+    if (g5x_index < 0 || g5x_index >= 6 || axis < 0 || axis > 5) {
         emit commandError(QStringLiteral("SET_WORK_COORD"), "无效的坐标系或轴编号");
         return false;
     }
-    // 清零所有偏移
-    for (int i = 0; i < 6; ++i) {
-        emc_cmd.offset.tran.xyz[i] = 0.0;
+    emc_cmd.g5x_index = g5x_index;
+    // 初始化所有轴偏移
+    emc_cmd.origin.tran.x = 0.0;
+    emc_cmd.origin.tran.y = 0.0;
+    emc_cmd.origin.tran.z = 0.0;
+    emc_cmd.origin.a = 0.0;
+    emc_cmd.origin.b = 0.0;
+    emc_cmd.origin.c = 0.0;
+    // 设置目标轴偏移 (0:x, 1:y, 2:z, 3:a, 4:b, 5:c)
+    switch (axis) {
+    case 0: emc_cmd.origin.tran.x = value; break;
+    case 1: emc_cmd.origin.tran.y = value; break;
+    case 2: emc_cmd.origin.tran.z = value; break;
+    case 3: emc_cmd.origin.a = value; break;
+    case 4: emc_cmd.origin.b = value; break;
+    case 5: emc_cmd.origin.c = value; break;
     }
-    // 设置目标轴偏移
-    emc_cmd.offset.tran.xyz[axis] = static_cast<double>(value);
     int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
     if (result != 0) {
         emit commandError(QStringLiteral("SET_WORK_COORD"), QString("NML 写入失败: %1").arg(result));

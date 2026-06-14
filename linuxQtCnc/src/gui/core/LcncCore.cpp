@@ -313,29 +313,29 @@ void LcncCore::mapEmcStatToLcnc(const void *raw)
     const EMC_STAT *s = static_cast<const EMC_STAT *>(raw);
     if (!s) return;
 
-    // 机床状态
+    // 机床状态（注意：EMC_TASK_STATE 是 C++ enum class，必须用 :: 访问）
     switch (s->task.state) {
-    case EMC_TASK_STATE_ESTOP: m_status.taskState = MachineState::ESTOP; break;
-    case EMC_TASK_STATE_ESTOP_RESET: m_status.taskState = MachineState::ESTOP_RESET; break;
-    case EMC_TASK_STATE_OFF: m_status.taskState = MachineState::OFF; break;
-    case EMC_TASK_STATE_ON: m_status.taskState = MachineState::ON; break;
+    case EMC_TASK_STATE::ESTOP: m_status.taskState = MachineState::ESTOP; break;
+    case EMC_TASK_STATE::ESTOP_RESET: m_status.taskState = MachineState::ESTOP_RESET; break;
+    case EMC_TASK_STATE::OFF: m_status.taskState = MachineState::OFF; break;
+    case EMC_TASK_STATE::ON: m_status.taskState = MachineState::ON; break;
     default: m_status.taskState = MachineState::ESTOP; break;
     }
 
-    // 运动模式
+    // 运动模式（enum class）
     switch (s->task.mode) {
-    case EMC_TASK_MODE_MANUAL: m_status.motionMode = MotionMode::MANUAL; break;
-    case EMC_TASK_MODE_MDI: m_status.motionMode = MotionMode::MDI; break;
-    case EMC_TASK_MODE_AUTO: m_status.motionMode = MotionMode::AUTO; break;
+    case EMC_TASK_MODE::MANUAL: m_status.motionMode = MotionMode::MANUAL; break;
+    case EMC_TASK_MODE::MDI: m_status.motionMode = MotionMode::MDI; break;
+    case EMC_TASK_MODE::AUTO: m_status.motionMode = MotionMode::AUTO; break;
     default: m_status.motionMode = MotionMode::MANUAL; break;
     }
 
-    // 解释器状态
+    // 解释器状态（enum class）
     switch (s->task.interpState) {
-    case EMC_TASK_INTERP_IDLE: m_status.interpState = InterpState::IDLE; break;
-    case EMC_TASK_INTERP_READING: m_status.interpState = InterpState::RUNNING; break;
-    case EMC_TASK_INTERP_WAITING: m_status.interpState = InterpState::RUNNING; break;
-    case EMC_TASK_INTERP_PAUSED: m_status.interpState = InterpState::PAUSED; break;
+    case EMC_TASK_INTERP::IDLE: m_status.interpState = InterpState::IDLE; break;
+    case EMC_TASK_INTERP::READING: m_status.interpState = InterpState::RUNNING; break;
+    case EMC_TASK_INTERP::WAITING: m_status.interpState = InterpState::RUNNING; break;
+    case EMC_TASK_INTERP::PAUSED: m_status.interpState = InterpState::PAUSED; break;
     default: m_status.interpState = InterpState::IDLE; break;
     }
 
