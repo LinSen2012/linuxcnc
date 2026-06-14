@@ -1,12 +1,21 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt5 GUI 控制器
- * main.cpp - 程序入口
- *
- * 支持的命令行参数：
- *   --ini <file>     指定 INI 配置文件（默认：sim/lathe.ini）
- *   --sim            以模拟模式启动（不连接真实 NML 服务器）
- *   --debug          启用调试输出
- */
+/********************************************************************
+* Description: main.cpp
+*   Program entry point for linuxQtCnc GUI application.
+*   Supports the following command-line arguments:
+*     --ini <file>   Specify INI configuration file
+*                    (default: sim/lathe.ini)
+*     --sim          Start in simulation mode (no real NML server)
+*     --debug        Enable debug output
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
+
 #include "LcncApplication.h"
 #include "LcncCore.h"
 #include "mainwindow/MainWindow.h"

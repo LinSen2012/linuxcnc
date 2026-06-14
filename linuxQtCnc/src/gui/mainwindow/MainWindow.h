@@ -1,16 +1,25 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt6 GUI 控制器
- * MainWindow - 主窗口
- *
- * CNC 控制器的主界面窗口，采用纯代码布局（无 .ui 文件）。
- * 布局结构：
- * - 顶部：菜单栏 + 工具栏
- * - 中央：分割布局
- *   - 左侧：3D 刀具路径预览 (ToolpathView)
- *   - 右侧上：DRO 数字读数 + 状态栏
- *   - 右侧下：G 代码编辑器
- * - 底部：点动面板 (JogPanel)
- */
+/********************************************************************
+* Description: MainWindow.h
+*   MainWindow — Main window for linuxQtCnc.
+*   CNC controller main GUI window, constructed entirely in code
+*   (no .ui file).
+*   Layout structure:
+*     - Top: Menu bar + toolbar
+*     - Center: Split layout
+*       - Left: 3D toolpath preview (ToolpathView)
+*       - Right top: DRO digital readout + status bar
+*       - Right bottom: G-code editor
+*     - Bottom: Jog panel (JogPanel)
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
+
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
