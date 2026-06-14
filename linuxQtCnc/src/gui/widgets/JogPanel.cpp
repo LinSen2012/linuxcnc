@@ -167,6 +167,21 @@ void JogPanel::setupUi()
     coolantBtnLayout->addWidget(m_coolantMistBtn);
     auxLayout->addLayout(coolantBtnLayout);
 
+    connect(m_coolantFloodBtn, &QPushButton::toggled, this, [this](bool checked) {
+        if (checked) {
+            emit coolantFloodOn();
+        } else {
+            emit coolantFloodOff();
+        }
+    });
+    connect(m_coolantMistBtn, &QPushButton::toggled, this, [this](bool checked) {
+        if (checked) {
+            emit coolantMistOn();
+        } else {
+            emit coolantMistOff();
+        }
+    });
+
     auxLayout->addStretch();
     mainLayout->addWidget(auxGroup);
 

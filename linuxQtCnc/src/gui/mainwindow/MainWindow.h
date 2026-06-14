@@ -26,6 +26,7 @@ class JogPanel;
 class StatusBarWidget;
 class ToolpathView;
 class LcncCore;
+class LcncStatusData;
 
 /**
  * @brief MainWindow - CNC 控制器主窗口
@@ -40,9 +41,10 @@ class MainWindow : public QMainWindow
 public:
     /**
      * @brief 构造函数
+     * @param core LcncCore 单例指针（由调用方负责生命周期）
      * @param parent 父窗口
      */
-    explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(LcncCore *core, QWidget *parent = nullptr);
 
     /**
      * @brief 析构函数

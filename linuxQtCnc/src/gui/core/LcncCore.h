@@ -348,6 +348,11 @@ private:
     void initSimulation();
 
 private:
+    // mapEmcStatToLcnc: Linux-only. Declaration in .cpp using forward void*.
+    // On Windows, the Linux-only overload in .cpp is unreachable (m_nmlStat is nullptr).
+    void mapEmcStatToLcnc(const void *s);
+
+private:
     static LcncCore *m_instance;   ///< 单例实例指针
 
     QTimer *m_pollTimer = nullptr; ///< 状态轮询定时器
@@ -363,6 +368,13 @@ private:
     // 模拟数据计数器
     int m_simStep = 0;             ///< 模拟步进计数
     double m_simTime = 0.0;        ///< 模拟时间
+
+    // Linux NML 通道（仅在 Linux 构建时使用）
+#ifdef Q_OS_LINUX
+    void *m_nmlCmd = nullptr;         // RCS_CMD_CHANNEL*
+    void *m_nmlStat = nullptr;         // RCS_STAT_CHANNEL*
+    void *m_emcStat = nullptr;         // EMC_STAT*
+#endif
 };
 
 #endif // LCNC_CORE_H

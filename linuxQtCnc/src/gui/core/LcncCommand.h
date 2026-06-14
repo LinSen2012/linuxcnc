@@ -375,9 +375,22 @@ private:
      */
     bool sendCommand(const QString &commandName);
 
+public:
+    // ========================================================================
+    // Linux NML 通道设置（仅 Linux 构建）
+    // ========================================================================
 #ifdef Q_OS_LINUX
-    // TODO: Linux 上添加 NML 命令通道指针
-    // RCS_CMD_CHANNEL *m_nmlCmd = nullptr;
+    /**
+     * @brief 设置 NML 命令通道
+     * @param ch 命令通道指针（由 LcncCore 初始化后传入）
+     */
+    void setNmlChannel(void *ch);
+#else
+    void setNmlChannel(void *ch) { (void)ch; }
+#endif
+
+#ifdef Q_OS_LINUX
+    void *m_nmlCmd = nullptr;  // RCS_CMD_CHANNEL*
 #endif
 };
 

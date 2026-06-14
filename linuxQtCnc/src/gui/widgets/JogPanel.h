@@ -81,6 +81,26 @@ signals:
      */
     void spindleControl(bool forward, bool stop = false);
 
+    /**
+     * @brief 冷却液喷流开启信号
+     */
+    void coolantFloodOn();
+
+    /**
+     * @brief 冷却液喷流关闭信号
+     */
+    void coolantFloodOff();
+
+    /**
+     * @brief 冷却液雾化开启信号
+     */
+    void coolantMistOn();
+
+    /**
+     * @brief 冷却液雾化关闭信号
+     */
+    void coolantMistOff();
+
 private:
     /**
      * @brief 初始化 UI

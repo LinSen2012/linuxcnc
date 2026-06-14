@@ -48,6 +48,24 @@ public:
     bool loadFile(const QString &filename);
 
     /**
+     * @brief 设置 G 代码程序内容
+     * @param program G 代码文本
+     */
+    void setProgram(const QString &program);
+
+    /**
+     * @brief 获取 G 代码程序内容
+     * @return G 代码文本
+     */
+    QString program() const;
+
+    /**
+     * @brief 设置当前文件路径
+     * @param path 文件路径
+     */
+    void setFilePath(const QString &path);
+
+    /**
      * @brief 高亮指定行（程序运行时指示当前执行行）
      * @param line 行号（从 0 开始，-1 取消高亮）
      */
@@ -60,6 +78,12 @@ public:
     QString currentFile() const;
 
 signals:
+    /**
+     * @brief 文件加载完成信号
+     * @param filename 文件路径
+     */
+    void fileLoaded(const QString &filename);
+
     /**
      * @brief MDI 命令请求信号
      * @param command G 代码命令字符串
@@ -82,6 +106,12 @@ protected:
      * @brief 调整大小事件
      */
     void resizeEvent(QResizeEvent *event) override;
+
+    /**
+     * @brief 绘制行号区域（由 GCodeLineNumberArea 调用）
+     * @param event 绘制事件
+     */
+    void lineNumberAreaPaintEvent(QPaintEvent *event);
 
 private slots:
     /**

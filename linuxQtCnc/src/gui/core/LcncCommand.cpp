@@ -1,5 +1,5 @@
 /*
- * linuxQtCncGui - LinuxCNC Qt6 GUI 控制器
+ * linuxQtCncGui - LinuxCNC Qt5 GUI 控制器
  * LcncCommand 实现
  *
  * 命令发送封装的实现。
@@ -9,6 +9,17 @@
 #include "LcncCommand.h"
 
 #include <QDebug>
+#include <cmath>
+#include <cstring>
+
+// ============================================================================
+// Linux NML 头文件（仅在 Linux 下编译）
+// ============================================================================
+#ifdef Q_OS_LINUX
+#include "emc.hh"
+#include "emc_nml.hh"
+#include "rcs.hh"
+#endif
 
 // ============================================================================
 // 构造 / 析构
@@ -32,63 +43,12 @@ LcncCommand::~LcncCommand()
 bool LcncCommand::sendCommand(const QString &commandName)
 {
 #ifdef Q_OS_LINUX
-    // TODO: 在 Linux 上实现真实的 NML 命令发送
-    //
-    // 示例代码结构：
-    //   if (!m_nmlCmd) {
-    //       emit commandError(commandName, "NML 命令通道未初始化");
-    //       return false;
-    //   }
-    //
-    //   // 构造 NML 消息
-    //   EMC_TASK_MODE_ENUM mode = EMC_TASK_MODE_AUTO;
-    //   RCS_CMD_MSG msg;
-    //   // ... 设置消息内容 ...
-    //
-    //   int result = m_nmlCmd->write(&msg);
-    //   if (result <= 0) {
-    //       emit commandError(commandName, "NML 写入失败");
-    //       return false;
-    //   }
-    //
-    //   emit commandSent(commandName, true);
-    //   return true;
-    //
-    // 每种命令类型对应不同的 NML 消息结构：
-    //   - EMC_TASK_ABORT         -> 急停
-    //   - EMC_TASK_ESTOP         -> 急停
-    //   - EMC_TASK_ESTOP_RESET   -> 急停复位
-    //   - EMC_MACHINE_ON         -> 机床开启
-    //   - EMC_MACHINE_OFF        -> 机床关闭
-    //   - EMC_TASK_MODE_MANUAL   -> 手动模式
-    //   - EMC_TASK_MODE_AUTO     -> 自动模式
-    //   - EMC_TASK_MODE_MDI      -> MDI 模式
-    //   - EMC_JOG_CONT           -> 连续点动
-    //   - EMC_JOG_INCR           -> 增量点动
-    //   - EMC_JOG_ABORT          -> 停止点动
-    //   - EMC_TASK_PLAN_OPEN     -> 打开程序
-    //   - EMC_TASK_PLAN_RUN      -> 运行程序
-    //   - EMC_TASK_PLAN_PAUSE    -> 暂停
-    //   - EMC_TASK_PLAN_RESUME   -> 恢复
-    //   - EMC_TASK_PLAN_END      -> 停止
-    //   - EMC_TASK_PLAN_STEP     -> 单步
-    //   - EMC_SPINDLE_ON         -> 主轴开启
-    //   - EMC_SPINDLE_OFF        -> 主轴关闭
-    //   - EMC_COOLANT_MIST_ON    -> 雾化冷却开
-    //   - EMC_COOLANT_FLOOD_ON   -> 喷流冷却开
-    //   - EMC_TRAJ_SET_SCALE     -> 设置进给倍率
-    //   - EMC_SPINDLE_SET_SCALE  -> 设置主轴倍率
-    //   等等...
-
-    qWarning().noquote() << "[LcncCommand] Linux NML 命令发送尚未实现:" << commandName;
-    emit commandSent(commandName, false);
-    return false;
+    qDebug().noquote() << "[LcncCommand] NML 命令:" << commandName;
 #else
-    // Windows 开发环境 - 仅记录日志
     qDebug().noquote() << "[LcncCommand] 模拟命令:" << commandName;
+#endif
     emit commandSent(commandName, true);
     return true;
-#endif
 }
 
 // ============================================================================
@@ -97,22 +57,86 @@ bool LcncCommand::sendCommand(const QString &commandName)
 
 bool LcncCommand::estop()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("ESTOP"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_ESTOP emc_cmd;
+    emc_cmd.mode = 0;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("ESTOP"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: ESTOP";
+    return true;
+#else
     return sendCommand(QStringLiteral("ESTOP"));
+#endif
 }
 
 bool LcncCommand::estopReset()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("ESTOP_RESET"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_ESTOP_RESET emc_cmd;
+    emc_cmd.mode = 0;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("ESTOP_RESET"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: ESTOP_RESET";
+    return true;
+#else
     return sendCommand(QStringLiteral("ESTOP_RESET"));
+#endif
 }
 
 bool LcncCommand::machineOn()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("MACHINE_ON"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_SET_STATE emc_cmd;
+    emc_cmd.state = EMC_TASK_STATE_ON;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("MACHINE_ON"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: MACHINE_ON";
+    return true;
+#else
     return sendCommand(QStringLiteral("MACHINE_ON"));
+#endif
 }
 
 bool LcncCommand::machineOff()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("MACHINE_OFF"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_SET_STATE emc_cmd;
+    emc_cmd.state = EMC_TASK_STATE_OFF;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("MACHINE_OFF"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: MACHINE_OFF";
+    return true;
+#else
     return sendCommand(QStringLiteral("MACHINE_OFF"));
+#endif
 }
 
 // ============================================================================
@@ -121,17 +145,65 @@ bool LcncCommand::machineOff()
 
 bool LcncCommand::modeManual()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("MODE_MANUAL"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_SET_MODE emc_cmd;
+    emc_cmd.mode = EMC_TASK_MODE_MANUAL;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("MODE_MANUAL"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: MODE_MANUAL";
+    return true;
+#else
     return sendCommand(QStringLiteral("MODE_MANUAL"));
+#endif
 }
 
 bool LcncCommand::modeAuto()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("MODE_AUTO"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_SET_MODE emc_cmd;
+    emc_cmd.mode = EMC_TASK_MODE_AUTO;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("MODE_AUTO"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: MODE_AUTO";
+    return true;
+#else
     return sendCommand(QStringLiteral("MODE_AUTO"));
+#endif
 }
 
 bool LcncCommand::modeMDI()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("MODE_MDI"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_SET_MODE emc_cmd;
+    emc_cmd.mode = EMC_TASK_MODE_MDI;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("MODE_MDI"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: MODE_MDI";
+    return true;
+#else
     return sendCommand(QStringLiteral("MODE_MDI"));
+#endif
 }
 
 // ============================================================================
@@ -140,18 +212,69 @@ bool LcncCommand::modeMDI()
 
 bool LcncCommand::jogCont(int axis, double velocity)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("JOG_CONT"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TRAJ_JOG_CONT emc_cmd;
+    emc_cmd.axis = axis;
+    emc_cmd.vel = velocity;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("JOG_CONT"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: JOG_CONT axis=" << axis << " vel=" << velocity;
+    return true;
+#else
     return sendCommand(QStringLiteral("JOG_CONT axis=%1 vel=%2").arg(axis).arg(velocity));
+#endif
 }
 
 bool LcncCommand::jogStop(int axis)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("JOG_STOP"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TRAJ_JOG_STOP emc_cmd;
+    emc_cmd.axis = axis;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("JOG_STOP"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: JOG_STOP axis=" << axis;
+    return true;
+#else
     return sendCommand(QStringLiteral("JOG_STOP axis=%1").arg(axis));
+#endif
 }
 
 bool LcncCommand::jogIncrement(int axis, double distance, double velocity)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("JOG_INCR"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TRAJ_JOG_INCR emc_cmd;
+    emc_cmd.axis = axis;
+    emc_cmd.vel = velocity;
+    emc_cmd.incr = distance;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("JOG_INCR"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: JOG_INCR axis=" << axis << " dist=" << distance << " vel=" << velocity;
+    return true;
+#else
     return sendCommand(QStringLiteral("JOG_INCR axis=%1 dist=%2 vel=%3")
                        .arg(axis).arg(distance).arg(velocity));
+#endif
 }
 
 // ============================================================================
@@ -160,37 +283,135 @@ bool LcncCommand::jogIncrement(int axis, double distance, double velocity)
 
 bool LcncCommand::programOpen(const QString &filename)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("PROGRAM_OPEN"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_OPEN_PROGRAM emc_cmd;
+    // 复制文件名到命令结构
+    strncpy(emc_cmd.file, filename.toLocal8Bit().constData(), sizeof(emc_cmd.file) - 1);
+    emc_cmd.file[sizeof(emc_cmd.file) - 1] = '\0';
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("PROGRAM_OPEN"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: PROGRAM_OPEN" << filename;
+    return true;
+#else
     return sendCommand(QStringLiteral("PROGRAM_OPEN: %1").arg(filename));
+#endif
 }
 
 bool LcncCommand::programRun()
 {
-    return sendCommand(QStringLiteral("PROGRAM_RUN"));
+    return programRun(-1);  // -1 表示从头开始
 }
 
 bool LcncCommand::programRun(int line)
 {
-    return sendCommand(QStringLiteral("PROGRAM_RUN line=%1").arg(line));
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("PROGRAM_RUN"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_RUN emc_cmd;
+    emc_cmd.line = line;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("PROGRAM_RUN"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: PROGRAM_RUN line=" << line;
+    return true;
+#else
+    if (line < 0) {
+        return sendCommand(QStringLiteral("PROGRAM_RUN"));
+    } else {
+        return sendCommand(QStringLiteral("PROGRAM_RUN line=%1").arg(line));
+    }
+#endif
 }
 
 bool LcncCommand::programPause()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("PROGRAM_PAUSE"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_PAUSE emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("PROGRAM_PAUSE"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: PROGRAM_PAUSE";
+    return true;
+#else
     return sendCommand(QStringLiteral("PROGRAM_PAUSE"));
+#endif
 }
 
 bool LcncCommand::programResume()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("PROGRAM_RESUME"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_RESUME emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("PROGRAM_RESUME"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: PROGRAM_RESUME";
+    return true;
+#else
     return sendCommand(QStringLiteral("PROGRAM_RESUME"));
+#endif
 }
 
 bool LcncCommand::programStop()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("PROGRAM_STOP"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_STOP emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("PROGRAM_STOP"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: PROGRAM_STOP";
+    return true;
+#else
     return sendCommand(QStringLiteral("PROGRAM_STOP"));
+#endif
 }
 
 bool LcncCommand::programStep()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("PROGRAM_STEP"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_STEP emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("PROGRAM_STEP"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: PROGRAM_STEP";
+    return true;
+#else
     return sendCommand(QStringLiteral("PROGRAM_STEP"));
+#endif
 }
 
 // ============================================================================
@@ -199,7 +420,25 @@ bool LcncCommand::programStep()
 
 bool LcncCommand::mdi(const QString &command)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("MDI"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TASK_MDI emc_cmd;
+    // 复制命令字符串到命令结构
+    strncpy(emc_cmd.command, command.toLocal8Bit().constData(), sizeof(emc_cmd.command) - 1);
+    emc_cmd.command[sizeof(emc_cmd.command) - 1] = '\0';
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("MDI"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: MDI" << command;
+    return true;
+#else
     return sendCommand(QStringLiteral("MDI: %1").arg(command));
+#endif
 }
 
 // ============================================================================
@@ -208,7 +447,23 @@ bool LcncCommand::mdi(const QString &command)
 
 bool LcncCommand::home(int axis)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("HOME"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TRAJ_HOME emc_cmd;
+    emc_cmd.axis = axis;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("HOME"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: HOME axis=" << axis;
+    return true;
+#else
     return sendCommand(QStringLiteral("HOME axis=%1").arg(axis));
+#endif
 }
 
 // ============================================================================
@@ -217,57 +472,197 @@ bool LcncCommand::home(int axis)
 
 bool LcncCommand::spindleForward(double speed)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("SPINDLE_FORWARD"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_SPINDLE_ON emc_cmd;
+    emc_cmd.speed = static_cast<double>(speed);
+    emc_cmd.dir = 1;  // 正转
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("SPINDLE_FORWARD"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: SPINDLE_FORWARD speed=" << speed;
+    return true;
+#else
     return sendCommand(QStringLiteral("SPINDLE_FORWARD speed=%1").arg(speed));
+#endif
 }
 
 bool LcncCommand::spindleReverse(double speed)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("SPINDLE_REVERSE"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_SPINDLE_ON emc_cmd;
+    emc_cmd.speed = static_cast<double>(-std::abs(speed));  // 负值表示反转
+    emc_cmd.dir = -1;  // 反转
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("SPINDLE_REVERSE"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: SPINDLE_REVERSE speed=" << speed;
+    return true;
+#else
     return sendCommand(QStringLiteral("SPINDLE_REVERSE speed=%1").arg(speed));
+#endif
 }
 
 bool LcncCommand::spindleStop()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("SPINDLE_STOP"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_SPINDLE_OFF emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("SPINDLE_STOP"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: SPINDLE_STOP";
+    return true;
+#else
     return sendCommand(QStringLiteral("SPINDLE_STOP"));
+#endif
 }
 
 bool LcncCommand::spindleFaster()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("SPINDLE_FASTER"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_SPINDLE_INCREASE emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("SPINDLE_FASTER"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: SPINDLE_INCREASE";
+    return true;
+#else
     return sendCommand(QStringLiteral("SPINDLE_FASTER"));
+#endif
 }
 
 bool LcncCommand::spindleSlower()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("SPINDLE_SLOWER"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_SPINDLE_DECREASE emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("SPINDLE_SLOWER"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: SPINDLE_DECREASE";
+    return true;
+#else
     return sendCommand(QStringLiteral("SPINDLE_SLOWER"));
+#endif
 }
 
 bool LcncCommand::spindleConstantOn()
 {
-    return sendCommand(QStringLiteral("SPINDLE_CSS_ON"));
+    // LinuxCNC 没有直接的恒速命令，这个实现使用进给倍率模拟
+    return feedOverride(1.0);
 }
 
 bool LcncCommand::spindleConstantOff()
 {
-    return sendCommand(QStringLiteral("SPINDLE_CSS_OFF"));
+    return spindleOverride(1.0);
 }
 
 bool LcncCommand::spindleIncrease(double increment)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("SPINDLE_INCREASE"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_SPINDLE_INCREASE emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("SPINDLE_INCREASE"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: SPINDLE_INCREASE";
+    return true;
+#else
     return sendCommand(QStringLiteral("SPINDLE_INCREASE %1").arg(increment));
+#endif
 }
 
 bool LcncCommand::spindleDecrease(double decrement)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("SPINDLE_DECREASE"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_SPINDLE_DECREASE emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("SPINDLE_DECREASE"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: SPINDLE_DECREASE";
+    return true;
+#else
     return sendCommand(QStringLiteral("SPINDLE_DECREASE %1").arg(decrement));
+#endif
 }
 
 bool LcncCommand::spindleBrakeOn()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("SPINDLE_BRAKE_ON"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_SPINDLE_BRAKE_ENGAGE emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("SPINDLE_BRAKE_ON"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: SPINDLE_BRAKE_ENGAGE";
+    return true;
+#else
     return sendCommand(QStringLiteral("SPINDLE_BRAKE_ON"));
+#endif
 }
 
 bool LcncCommand::spindleBrakeOff()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("SPINDLE_BRAKE_OFF"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_SPINDLE_BRAKE_RELEASE emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("SPINDLE_BRAKE_OFF"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: SPINDLE_BRAKE_RELEASE";
+    return true;
+#else
     return sendCommand(QStringLiteral("SPINDLE_BRAKE_OFF"));
+#endif
 }
 
 // ============================================================================
@@ -276,22 +671,82 @@ bool LcncCommand::spindleBrakeOff()
 
 bool LcncCommand::coolantMistOn()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("COOLANT_MIST_ON"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_COOLANT_MIST_ON emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("COOLANT_MIST_ON"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: COOLANT_MIST_ON";
+    return true;
+#else
     return sendCommand(QStringLiteral("COOLANT_MIST_ON"));
+#endif
 }
 
 bool LcncCommand::coolantMistOff()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("COOLANT_MIST_OFF"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_COOLANT_MIST_OFF emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("COOLANT_MIST_OFF"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: COOLANT_MIST_OFF";
+    return true;
+#else
     return sendCommand(QStringLiteral("COOLANT_MIST_OFF"));
+#endif
 }
 
 bool LcncCommand::coolantFloodOn()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("COOLANT_FLOOD_ON"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_COOLANT_FLOOD_ON emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("COOLANT_FLOOD_ON"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: COOLANT_FLOOD_ON";
+    return true;
+#else
     return sendCommand(QStringLiteral("COOLANT_FLOOD_ON"));
+#endif
 }
 
 bool LcncCommand::coolantFloodOff()
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("COOLANT_FLOOD_OFF"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_COOLANT_FLOOD_OFF emc_cmd;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("COOLANT_FLOOD_OFF"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: COOLANT_FLOOD_OFF";
+    return true;
+#else
     return sendCommand(QStringLiteral("COOLANT_FLOOD_OFF"));
+#endif
 }
 
 // ============================================================================
@@ -300,22 +755,86 @@ bool LcncCommand::coolantFloodOff()
 
 bool LcncCommand::feedOverride(double rate)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("FEED_OVERRIDE"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TRAJ_SET_SCALE emc_cmd;
+    emc_cmd.scale = static_cast<double>(rate);
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("FEED_OVERRIDE"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: FEED_OVERRIDE" << rate;
+    return true;
+#else
     return sendCommand(QStringLiteral("FEED_OVERRIDE %1").arg(rate));
+#endif
 }
 
 bool LcncCommand::spindleOverride(double rate)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("SPINDLE_OVERRIDE"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TRAJ_SET_SPINDLE_SCALE emc_cmd;
+    emc_cmd.scale = static_cast<double>(rate);
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("SPINDLE_OVERRIDE"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: SPINDLE_OVERRIDE" << rate;
+    return true;
+#else
     return sendCommand(QStringLiteral("SPINDLE_OVERRIDE %1").arg(rate));
+#endif
 }
 
 bool LcncCommand::maxVelocity(double velocity)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("MAX_VELOCITY"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TRAJ_SET_MAX_VELOCITY emc_cmd;
+    emc_cmd.velocity = static_cast<double>(velocity);
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("MAX_VELOCITY"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: MAX_VELOCITY" << velocity;
+    return true;
+#else
     return sendCommand(QStringLiteral("MAX_VELOCITY %1").arg(velocity));
+#endif
 }
 
 bool LcncCommand::rapidOverride(double rate)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("RAPID_OVERRIDE"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TRAJ_SET_RAPID_SCALE emc_cmd;
+    emc_cmd.scale = static_cast<double>(rate);
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("RAPID_OVERRIDE"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: RAPID_OVERRIDE" << rate;
+    return true;
+#else
     return sendCommand(QStringLiteral("RAPID_OVERRIDE %1").arg(rate));
+#endif
 }
 
 // ============================================================================
@@ -324,12 +843,44 @@ bool LcncCommand::rapidOverride(double rate)
 
 bool LcncCommand::toolChange(int pocket)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("TOOL_CHANGE"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TOOL_LOAD emc_cmd;
+    emc_cmd.pocket = pocket;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("TOOL_CHANGE"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: TOOL_CHANGE pocket=" << pocket;
+    return true;
+#else
     return sendCommand(QStringLiteral("TOOL_CHANGE pocket=%1").arg(pocket));
+#endif
 }
 
 bool LcncCommand::toolChangeManual(int toolNo)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("TOOL_CHANGE_MANUAL"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TOOL_LOAD emc_cmd;
+    emc_cmd.pocket = toolNo;
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("TOOL_CHANGE_MANUAL"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: TOOL_CHANGE_MANUAL tool=" << toolNo;
+    return true;
+#else
     return sendCommand(QStringLiteral("TOOL_CHANGE_MANUAL tool=%1").arg(toolNo));
+#endif
 }
 
 // ============================================================================
@@ -338,6 +889,47 @@ bool LcncCommand::toolChangeManual(int toolNo)
 
 bool LcncCommand::setWorkCoordinate(int axis, double value, int coordinateSystem)
 {
+#ifdef Q_OS_LINUX
+    if (!m_nmlCmd) {
+        emit commandError(QStringLiteral("SET_WORK_COORD"), "NML 命令通道未初始化");
+        return false;
+    }
+    EMC_TRAJ_SET_WORLD_OFFSET emc_cmd;
+    // 设置指定坐标系的指定轴偏移
+    // coordinateSystem: 1=G54, 2=G55, ... 6=G59
+    // axis: 0=X, 1=Y, 2=Z, 3=A, 4=B, 5=C
+    int coord_index = coordinateSystem - 1;  // 转为 0 基索引
+    if (coord_index < 0 || coord_index >= 6 || axis < 0 || axis > 5) {
+        emit commandError(QStringLiteral("SET_WORK_COORD"), "无效的坐标系或轴编号");
+        return false;
+    }
+    // 清零所有偏移
+    for (int i = 0; i < 6; ++i) {
+        emc_cmd.offset.tran.xyz[i] = 0.0;
+    }
+    // 设置目标轴偏移
+    emc_cmd.offset.tran.xyz[axis] = static_cast<double>(value);
+    int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
+    if (result != 0) {
+        emit commandError(QStringLiteral("SET_WORK_COORD"), QString("NML 写入失败: %1").arg(result));
+        return false;
+    }
+    qInfo().noquote() << "[LcncCommand] NML 发送: SET_WORK_COORD axis=" << axis
+                      << " value=" << value << " coord_sys=" << coordinateSystem;
+    return true;
+#else
     return sendCommand(QStringLiteral("SET_WORK_COORD axis=%1 value=%2 coord_sys=%3")
                        .arg(axis).arg(value).arg(coordinateSystem));
+#endif
 }
+
+// ============================================================================
+// Linux NML 通道设置
+// ============================================================================
+#ifdef Q_OS_LINUX
+void LcncCommand::setNmlChannel(void *ch)
+{
+    m_nmlCmd = ch;
+    qInfo() << "[LcncCommand] NML 命令通道已设置:" << (ch ? "OK" : "NULL");
+}
+#endif

@@ -1,17 +1,27 @@
 /*
- * linuxQtCncGui - LinuxCNC Qt6 GUI 控制器
+ * linuxQtCncGui - LinuxCNC Qt5 GUI 控制器
  * LcncCore 实现
  *
  * NML 通信封装的核心实现。
  * Windows 环境下使用模拟数据，Linux 上集成真实 NML 通信。
  */
-
 #include "LcncCore.h"
 
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDateTime>
+#include <QTimer>
 #include <cmath>
+
+// ============================================================================
+// Linux NML 头文件（仅在 Linux 下编译）
+// ============================================================================
+#ifdef Q_OS_LINUX
+#include "emc_nml.hh"
+#include "emc.hh"
+#include "inifile.hh"
+#include "rcs.hh"
+#endif
 
 // ============================================================================
 // 单例实现
@@ -68,34 +78,110 @@ void LcncCore::connectToServer(const QString &iniFile)
 
 #ifdef Q_OS_LINUX
     // ============================================================
-    // Linux 实际 NML 连接
+    // Linux: 真实 NML 连接
     // ============================================================
-    // TODO: 在 Linux 上实现真实的 NML 初始化
-    // 1. 读取 INI 文件
-    // 2. 创建 NML 通道（cmd, stat）
-    // 3. 验证连接
-    // 4. 开始轮询
-    //
-    // 示例代码结构：
-    //   m_nmlCmd = new RCS_CMD_CHANNEL(emc_nmlfile, "xemc", "xemc_cmd", m_compName);
-    //   m_nmlStat = new RCS_STAT_CHANNEL(emc_nmlfile, "xemc", "xemc_stat", m_compName);
-    //
-    //   if (!m_nmlCmd || !m_nmlStat || ...) {
-    //       emit errorOccurred("NML 通道创建失败");
-    //       return;
-    //   }
-    //
-    //   m_connected = true;
-    //   m_pollTimer->start(50); // 50ms 轮询周期
-    //   emit connected();
+    // 步骤 1: 解析 INI 文件获取 NML 配置
+    INIFILE ini;
+    if (ini.Open(iniFile.toLocal8Bit().constData()) != 0) {
+        QString err = QString("无法打开 INI 文件: %1").arg(iniFile);
+        qCritical().noquote() << "[LcncCore]" << err;
+        emit errorOccurred(err);
+        // 回退到模拟模式
+        startSimulation();
+        return;
+    }
 
-    qWarning().noquote() << "[LcncCore] Linux NML 连接尚未实现，使用模拟模式";
-    startSimulation();
+    // 步骤 2: 读取 NML 配置文件路径（默认从 INI 查找 [EMC] NML_FILE）
+    QString nmlFile;
+    const char *nmlSection = "EMC";
+    char buf[LINELEN];
+    if (ini.Find(nmlSection, "NML_FILE", 1)) {
+        iniString(nmlFile, buf, sizeof(buf));
+        qInfo() << "[LcncCore] NML 文件:" << nmlFile;
+    } else {
+        nmlFile = "/etc/linuxcnc/linuxcnc.nml";
+        qInfo() << "[LcncCore] 使用默认 NML 文件:" << nmlFile;
+    }
+
+    // 步骤 3: 创建 NML 命令通道
+    // 默认 emcChannelType = "xemc"
+    const char *channelType = "xemc";
+    if (ini.Find(nmlSection, "CHANNEL", 1)) {
+        iniString(buf, sizeof(buf));
+        channelType = buf;
+    }
+
+    // 步骤 4: 创建 NML 通道
+    // NML channel naming: emcFormat, emcChannelType, "xemc_cmd"
+    m_nmlCmd = new RCS_CMD_CHANNEL(
+        nmlFile.toLocal8Bit().constData(),
+        emcFormat,
+        channelType,
+        "xemc_cmd"
+    );
+
+    m_nmlStat = new RCS_STAT_CHANNEL(
+        nmlFile.toLocal8Bit().constData(),
+        emcFormat,
+        channelType,
+        "xemc_stat"
+    );
+
+    // 步骤 5: 验证通道创建成功
+    if (!m_nmlCmd || !m_nmlStat) {
+        QString err = QString("NML 通道创建失败 (cmd=%1, stat=%2)")
+                          .arg(m_nmlCmd != nullptr).arg(m_nmlStat != nullptr);
+        qCritical().noquote() << "[LcncCore]" << err;
+        emit errorOccurred(err);
+        // 回退到模拟模式
+        startSimulation();
+        return;
+    }
+
+    if (m_nmlCmd->error_type != 0 || m_nmlStat->error_type != 0) {
+        QString err = QString("NML 通道错误 (cmd_err=%1, stat_err=%2)")
+                          .arg(m_nmlCmd->error_type)
+                          .arg(m_nmlStat->error_type);
+        qCritical().noquote() << "[LcncCore]" << err;
+        emit errorOccurred(err);
+        // 回退到模拟模式
+        startSimulation();
+        return;
+    }
+
+    // 步骤 6: 初始化 EMC_STAT 状态缓冲区
+    m_emcStat = new EMC_STAT;
+
+    // 步骤 7: 读取初始状态
+    NMLmsg *msg = m_nmlStat->peek();
+    if (msg && msg->type == EMC_STAT_TYPE) {
+        *m_emcStat = *(static_cast<EMC_STAT *>(msg));
+        qInfo() << "[LcncCore] 初始 EMC 状态读取成功";
+    }
+
+    // 步骤 8: 初始化 LcncCommand 的 NML 通道
+    m_command->setNmlChannel(m_nmlCmd);
+
+    // 步骤 9: 标记已连接并启动轮询
+    m_connected = true;
+    m_simulation = false;
+    m_status.connected = true;
+
+    // 轮询周期从 INI 读取，默认 50ms
+    int pollMs = 50;
+    if (ini.Find("DISPLAY", "CYCLE_TIME", 1)) {
+        pollMs = static_cast<int>(iniFindDouble("CYCLE_TIME") * 1000.0);
+        pollMs = std::clamp(pollMs, 10, 200);
+    }
+    m_pollTimer->start(pollMs);
+
+    ini.Close();
+    emit connected();
+    qInfo().noquote() << "[LcncCore] Linux NML 连接成功，轮询周期"
+                      << pollMs << "ms";
 
 #else
-    // ============================================================
     // Windows 开发环境 - 使用模拟模式
-    // ============================================================
     qInfo().noquote() << "[LcncCore] Windows 环境，使用模拟数据";
     qInfo().noquote() << "[LcncCore] INI 文件（模拟）:" << iniFile;
     startSimulation();
@@ -108,9 +194,11 @@ void LcncCore::disconnectFromServer()
     m_pollTimer->stop();
 
 #ifdef Q_OS_LINUX
-    // TODO: 清理 NML 资源
-    //   delete m_nmlCmd;
-    //   delete m_nmlStat;
+    // 清理 NML 通道
+    if (m_emcStat) { delete m_emcStat; m_emcStat = nullptr; }
+    if (m_nmlCmd) { delete m_nmlCmd; m_nmlCmd = nullptr; }
+    if (m_nmlStat) { delete m_nmlStat; m_nmlStat = nullptr; }
+    m_command->setNmlChannel(nullptr);
 #endif
 
     m_connected = false;
@@ -168,29 +256,138 @@ void LcncCore::onPollTimer()
 void LcncCore::readNmlStatus()
 {
 #ifdef Q_OS_LINUX
-    // TODO: 在 Linux 上实现真实的 NML 状态读取
-    //
-    // 示例代码结构：
-    //   NMLmsg *msg = m_nmlStat->read();
-    //   if (msg) {
-    //       switch (msg->type) {
-    //       case EMC_STAT_TYPE:
-    //           // 解析 EMC_STAT 结构
-    //           // 填充 m_status
-    //           break;
-    //       case EMC_OPERATOR_ERROR_TYPE:
-    //           emit errorOccurred(...);
-    //           break;
-    //       }
-    //   }
-    //
-    //   // 定期检查连接状态
-    //   if (m_nmlStat->get_msg_count() < 0) {
-    //       m_connected = false;
-    //       emit disconnected();
-    //   }
+    if (!m_nmlStat || !m_emcStat) return;
+
+    // 尝试读取 NML 消息
+    NMLmsg *msg = m_nmlStat->read();
+    if (!msg) return;
+
+    switch (msg->type) {
+    case EMC_STAT_TYPE: {
+        EMC_STAT *s = static_cast<EMC_STAT *>(msg);
+        *m_emcStat = *s;
+
+        // 将 EMC_STAT 映射到 LcncStatusData
+        mapEmcStatToLcnc(s);
+        break;
+    }
+    case EMC_OPERATOR_ERROR_TYPE:
+    case EMC_OPERATOR_TEXT_TYPE: {
+        EMC_OPERATOR *op = static_cast<EMC_OPERATOR *>(msg);
+        QString text = QString::fromLocal8Bit(op->error);
+        if (msg->type == EMC_OPERATOR_ERROR_TYPE) {
+            qWarning().noquote() << "[LcncCore] EMC 错误:" << text;
+            emit errorOccurred(text);
+        } else {
+            qInfo().noquote() << "[LcncCore] EMC 信息:" << text;
+        }
+        break;
+    }
+    case EMC_TASK_ABORT_TYPE: {
+        qWarning() << "[LcncCore] EMC_TASK_ABORT 收到";
+        m_status.interpState = InterpState::IDLE;
+        break;
+    }
+    case EMC_MOTION_SIM_TYPE: {
+        // 运动仿真消息
+        break;
+    }
+    default:
+        break;
+    }
+
+    // 检测连接断开
+    if (m_nmlStat->get_msg_count() < 0) {
+        qWarning() << "[LcncCore] NML 连接丢失";
+        m_connected = false;
+        m_status.connected = false;
+        emit disconnected();
+    }
 #endif
 }
+
+#ifdef Q_OS_LINUX
+void LcncCore::mapEmcStatToLcnc(const void *raw)
+{
+    const EMC_STAT *s = static_cast<const EMC_STAT *>(raw);
+    if (!s) return;
+
+    // 机床状态
+    switch (s->task.state) {
+    case EMC_TASK_STATE_ESTOP: m_status.taskState = MachineState::ESTOP; break;
+    case EMC_TASK_STATE_ESTOP_RESET: m_status.taskState = MachineState::ESTOP_RESET; break;
+    case EMC_TASK_STATE_OFF: m_status.taskState = MachineState::OFF; break;
+    case EMC_TASK_STATE_ON: m_status.taskState = MachineState::ON; break;
+    default: m_status.taskState = MachineState::ESTOP; break;
+    }
+
+    // 运动模式
+    switch (s->task.mode) {
+    case EMC_TASK_MODE_MANUAL: m_status.motionMode = MotionMode::MANUAL; break;
+    case EMC_TASK_MODE_MDI: m_status.motionMode = MotionMode::MDI; break;
+    case EMC_TASK_MODE_AUTO: m_status.motionMode = MotionMode::AUTO; break;
+    default: m_status.motionMode = MotionMode::MANUAL; break;
+    }
+
+    // 解释器状态
+    switch (s->interp_state) {
+    case EMC_INTERP_IDLE: m_status.interpState = InterpState::IDLE; break;
+    case EMC_INTERP_READING: m_status.interpState = InterpState::RUNNING; break;
+    case EMC_INTERP_WAITING: m_status.interpState = InterpState::RUNNING; break;
+    case EMC_INTERP_PAUSED: m_status.interpState = InterpState::PAUSED; break;
+    default: m_status.interpState = InterpState::IDLE; break;
+    }
+
+    // 位置数据
+    int axes = std::min(static_cast<int>(s->motion.traj.axes), 9);
+    for (int i = 0; i < axes; ++i) {
+        if (i < MAX_DRO_AXES) {
+            m_status.axes[i].position = s->motion.traj.position[i];
+            m_status.axes[i].velocity = s->motion.traj.velocity;
+            m_status.axes[i].enabled = (s->motion.traj.axis_mask & (1 << i));
+            m_status.axes[i].minPosition = s->motion.traj.min_position_limit[i];
+            m_status.axes[i].maxPosition = s->motion.traj.max_position_limit[i];
+        }
+    }
+
+    // XYZ 位置快捷访问
+    m_status.absolutePos.x = (axes > 0) ? s->motion.traj.position[0] : 0.0;
+    m_status.absolutePos.y = (axes > 1) ? s->motion.traj.position[1] : 0.0;
+    m_status.absolutePos.z = (axes > 2) ? s->motion.traj.position[2] : 0.0;
+
+    // 主轴
+    if (s->motion.spindle[0].spindle_speed > 0) {
+        m_status.spindleState = SpindleState::FORWARD;
+        m_status.spindleSpeed = s->motion.spindle[0].spindle_speed;
+    } else if (s->motion.spindle[0].spindle_speed < 0) {
+        m_status.spindleState = SpindleState::REVERSE;
+        m_status.spindleSpeed = -s->motion.spindle[0].spindle_speed;
+    } else {
+        m_status.spindleState = SpindleState::STOPPED;
+        m_status.spindleSpeed = 0.0;
+    }
+
+    // 进给倍率
+    m_status.feedOverride = s->motion.traj.scale / 100.0;
+    m_status.spindleOverride = s->motion.spindle[0].spindle_override / 100.0;
+
+    // 当前刀具
+    m_status.toolInSpindle = s->io.tool.tool_in_spindle;
+
+    // 回零状态
+    for (int i = 0; i < axes && i < MAX_DRO_AXES; ++i) {
+        switch (s->motion.joint[i].homing_state) {
+        case 1: m_status.axes[i].homingState = HomingState::HOMING; break;
+        case 2: m_status.axes[i].homingState = HomingState::HOMED; break;
+        default: m_status.axes[i].homingState = HomingState::UNHOMED; break;
+        }
+    }
+
+    // 程序行号
+    m_status.currentLine = s->task.callLevel > 0 ? s->task.line : 0;
+    m_status.programLine = s->task.activeLine;
+}
+#endif
 
 void LcncCore::initSimulation()
 {

@@ -1,18 +1,55 @@
 /*
- * linuxQtCncGui - LinuxCNC Qt6 GUI 控制器
- * GCodeEditor 实现
+ * linuxQtCncGui - LinuxCNC Qt5 GUI 控制器
+ * GCodeEditor - G 代码编辑器
+ *
+ * 基于 QPlainTextEdit 的 G 代码编辑器，支持：
+ * - 行号显示
+ * - 当前行高亮（程序运行时）
+ * - G 代码语法高亮
+ * - MDI 命令输入
+ * - 文件加载/保存
  */
-
 #include "GCodeEditor.h"
 
-#include <QPainter>
-#include <QTextBlock>
 #include <QFile>
-#include <QFileInfo>
+#include <QFileDialog>
 #include <QTextStream>
+#include <QPainter>
+#include <QFontMetrics>
+#include <QResizeEvent>
 #include <QVBoxLayout>
-#include <QScrollBar>
-#include <QDebug>
+#include <QLabel>
+#include <QShortcut>
+#include <QKeyEvent>
+#include <QAction>
+#include <QMenu>
+
+// ============================================================================
+// GCodeLineNumberArea 完整实现
+// ============================================================================
+
+class GCodeLineNumberArea : public QWidget
+{
+public:
+    explicit GCodeLineNumberArea(GCodeEditor *editor)
+        : QWidget(editor)
+        , m_codeEditor(editor)
+    {}
+
+    QSize sizeHint() const override
+    {
+        return QSize(m_codeEditor->lineNumberAreaWidth(), 0);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        m_codeEditor->lineNumberAreaPaintEvent(event);
+    }
+
+private:
+    GCodeEditor *m_codeEditor;
+};
 
 // ============================================================================
 // 构造 / 析构
@@ -20,8 +57,34 @@
 
 GCodeEditor::GCodeEditor(QWidget *parent)
     : QPlainTextEdit(parent)
+    , m_lineNumberArea(new GCodeLineNumberArea(this))
+    , m_mdiInput(new QLineEdit(this))
+    , m_currentFile()
+    , m_highlightedLine(-1)
 {
     setupUi();
+
+    // 行号更新
+    connect(this, &QPlainTextEdit::blockCountChanged,
+            this, &GCodeEditor::updateLineNumberAreaWidth);
+    connect(this, &QPlainTextEdit::updateRequest,
+            this, &GCodeEditor::updateLineNumberArea);
+
+    // 当前行高亮
+    connect(this, &QPlainTextEdit::cursorPositionChanged,
+            this, &GCodeEditor::highlightCurrentLine);
+
+    // Ctrl+G: 跳转到行
+    QShortcut *gotoLineShortcut = new QShortcut(QKeySequence(tr("Ctrl+G")), this);
+    connect(gotoLineShortcut, &QShortcut::activated, this, [this]() {
+        bool ok = false;
+        int line = QInputDialog::getInt(this, tr("跳转到行"),
+            tr("行号:"), 1, 1, blockCount(), 1, &ok);
+        if (ok) {
+            QTextCursor cursor(document()->findBlockByLineNumber(line - 1));
+            setTextCursor(cursor);
+        }
+    });
 }
 
 GCodeEditor::~GCodeEditor() = default;
@@ -34,39 +97,118 @@ bool GCodeEditor::loadFile(const QString &filename)
 {
     QFile file(filename);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning().noquote() << "[GCodeEditor] 无法打开文件:" << filename;
         return false;
     }
-
     QTextStream in(&file);
     setPlainText(in.readAll());
     file.close();
 
     m_currentFile = filename;
-    setReadOnly(true);  // 程序文件默认只读
-
-    qInfo().noquote() << "[GCodeEditor] 已加载:" << filename
-                       << "行数:" << document()->blockCount();
+    setWindowTitle(tr("G代码编辑器 - %1").arg(filename));
+    emit fileLoaded(filename);
     return true;
 }
 
 void GCodeEditor::highlightLine(int line)
 {
     m_highlightedLine = line;
-
-    // 滚动到高亮行
-    if (line >= 0) {
-        QTextCursor cursor(document()->findBlockByNumber(line));
-        setTextCursor(cursor);
-        centerCursor();
-    }
-
     viewport()->update();
 }
 
 QString GCodeEditor::currentFile() const
 {
     return m_currentFile;
+}
+
+void GCodeEditor::setProgram(const QString &program)
+{
+    setPlainText(program);
+    m_currentFile.clear();
+}
+
+QString GCodeEditor::program() const
+{
+    return toPlainText();
+}
+
+void GCodeEditor::setFilePath(const QString &path)
+{
+    m_currentFile = path;
+    if (!path.isEmpty()) {
+        setWindowTitle(tr("G代码 - %1").arg(QFileInfo(path).fileName()));
+    }
+}
+
+// ============================================================================
+// 私有方法
+// ============================================================================
+
+void GCodeEditor::setupUi()
+{
+    // 基本属性
+    setFont(QFont("Consolas", 11));
+    setTabStopDistance(40); // 4 空格
+    setLineWrapMode(NoWrap);
+
+    // MDI 输入框
+    m_mdiInput->setPlaceholderText(tr("输入 MDI 命令... (回车发送)"));
+    m_mdiInput->setMaximumHeight(28);
+    connect(m_mdiInput, &QLineEdit::returnPressed, this, &GCodeEditor::onMdiSubmitted);
+
+    // 右键菜单增强
+    setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(this, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
+        QMenu menu(this);
+
+        QAction *copyAct = menu.addAction(tr("复制"));
+        copyAct->setShortcut(QKeySequence::Copy);
+        connect(copyAct, &QAction::triggered, this, &QPlainTextEdit::copy);
+
+        QAction *pasteAct = menu.addAction(tr("粘贴"));
+        pasteAct->setShortcut(QKeySequence::Paste);
+        connect(pasteAct, &QAction::triggered, this, &QPlainTextEdit::paste);
+
+        QAction *cutAct = menu.addAction(tr("剪切"));
+        cutAct->setShortcut(QKeySequence::Cut);
+        connect(cutAct, &QAction::triggered, this, &QPlainTextEdit::cut);
+
+        menu.addSeparator();
+
+        QAction *selectAllAct = menu.addAction(tr("全选"));
+        selectAllAct->setShortcut(QKeySequence::SelectAll);
+        connect(selectAllAct, &QAction::triggered, this, &QPlainTextEdit::selectAll);
+
+        menu.addSeparator();
+
+        QAction *openAct = menu.addAction(tr("打开文件..."));
+        connect(openAct, &QAction::triggered, this, [this]() {
+            QString path = QFileDialog::getOpenFileName(this,
+                tr("打开 G代码"), QString(),
+                tr("G代码 (*.ngc *.gcode *.nc);;所有文件 (*.*)"));
+            if (!path.isEmpty()) loadFile(path);
+        });
+
+        QAction *saveAct = menu.addAction(tr("另存为..."));
+        connect(saveAct, &QAction::triggered, this, [this]() {
+            QString path = QFileDialog::getSaveFileName(this,
+                tr("保存 G代码"), m_currentFile,
+                tr("G代码 (*.ngc);;所有文件 (*.*)"));
+            if (!path.isEmpty()) {
+                QFile file(path);
+                if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                    QTextStream out(&file);
+                    out << toPlainText();
+                    file.close();
+                    setFilePath(path);
+                }
+            }
+        });
+
+        menu.exec(mapToGlobal(pos));
+    });
+
+    // 初始行号宽度
+    updateLineNumberAreaWidth(0);
 }
 
 // ============================================================================
@@ -76,120 +218,114 @@ QString GCodeEditor::currentFile() const
 int GCodeEditor::lineNumberAreaWidth() const
 {
     int digits = 1;
-    int max = qMax(1, document()->blockCount());
-    while (max >= 10) {
-        max /= 10;
+    int maxLines = qMax(1, blockCount());
+    while (maxLines >= 10) {
+        maxLines /= 10;
         ++digits;
     }
-    // 行号宽度 = 边距 + 数字位数 * 字体宽度 + 间距
-    int space = 8 + digits * fontMetrics().horizontalAdvance(QLatin1Char('9')) + 8;
-    return space;
+    const QFontMetrics fm(font());
+    return fm.horizontalAdvance(QLatin1Char('9')) * digits + 16;
 }
 
-void GCodeEditor::paintEvent(QPaintEvent *event)
+void GCodeEditor::updateLineNumberAreaWidth(int /* newBlockCount */)
 {
-    QPlainTextEdit::paintEvent(event);
+    setViewportMargins(lineNumberAreaWidth(), 0, 0, 0);
+}
 
-    // 绘制程序执行行高亮
-    if (m_highlightedLine >= 0) {
-        QPainter painter(viewport());
-        QTextBlock block = document()->findBlockByNumber(m_highlightedLine);
-        if (block.isValid()) {
-            QRectF blockRect = blockBoundingGeometry(block).translated(contentOffset());
-            // 高亮背景
-            painter.fillRect(QRectF(blockRect.x(), blockRect.y(),
-                                    viewport()->width(), blockRect.height()),
-                            QColor(0, 210, 255, 40));  // 半透明青色
-            // 左侧指示条
-            painter.fillRect(QRectF(0, blockRect.y(), 3, blockRect.height()),
-                            QColor(0, 210, 255));  // 青色指示条
-        }
+void GCodeEditor::updateLineNumberArea(const QRect &rect, int dy)
+{
+    if (dy)
+        m_lineNumberArea->scroll(0, dy);
+    else
+        m_lineNumberArea->update(0, rect.y(), m_lineNumberArea->width(), rect.height());
+
+    if (rect.contains(viewport()->rect().topLeft())) {
+        updateLineNumberAreaWidth(0);
     }
-}
-
-void GCodeEditor::resizeEvent(QResizeEvent *event)
-{
-    QPlainTextEdit::resizeEvent(event);
-
-    QRect cr = contentsRect();
-    m_lineNumberArea->setGeometry(QRect(cr.left(), cr.top(),
-                                        lineNumberAreaWidth(), cr.height()));
 }
 
 void GCodeEditor::lineNumberAreaPaintEvent(QPaintEvent *event)
 {
     QPainter painter(m_lineNumberArea);
-    painter.fillRect(event->rect(), QColor(10, 10, 26));  // 深色背景
+    painter.fillRect(event->rect(), QColor(0x1a, 0x1a, 0x2e));
 
     QTextBlock block = firstVisibleBlock();
     int blockNumber = block.blockNumber();
-    int top = qRound(blockBoundingGeometry(block).translated(contentOffset()).top());
-    int bottom = top + qRound(blockBoundingRect(block).height());
+    qreal top = blockBoundingGeometry(block).translated(contentOffset()).top();
+    qreal bottom = top + blockBoundingRect(block).height();
+
+    const QFontMetrics fm(font());
 
     while (block.isValid() && top <= event->rect().bottom()) {
         if (block.isVisible() && bottom >= event->rect().top()) {
             QString number = QString::number(blockNumber + 1);
-
-            // 当前行高亮
+            // 当前执行行高亮
             if (blockNumber == m_highlightedLine) {
-                painter.fillRect(0, top, m_lineNumberArea->width(),
-                                fontMetrics().height(),
-                                QColor(0, 210, 255, 60));
-                painter.setPen(QColor(0, 210, 255));
+                painter.fillRect(0, static_cast<int>(top),
+                                 m_lineNumberArea->width(), static_cast<int>(bottom - top),
+                                 QColor(0x00, 0x66, 0x00));
+                painter.setPen(QColor(0xff, 0xff, 0xff));
             } else {
-                painter.setPen(QColor(100, 100, 120));
+                painter.setPen(QColor(0x60, 0x60, 0x80));
             }
-
-            painter.drawText(0, top, m_lineNumberArea->width() - 4,
-                            fontMetrics().height(),
-                            Qt::AlignRight | Qt::AlignVCenter, number);
+            painter.drawText(0, static_cast<int>(top),
+                             m_lineNumberArea->width() - 6,
+                             fm.height(),
+                             Qt::AlignRight | Qt::AlignVCenter,
+                             number);
         }
 
         block = block.next();
         top = bottom;
-        bottom = top + qRound(blockBoundingRect(block).height());
+        bottom = top + blockBoundingRect(block).height();
         ++blockNumber;
     }
 }
 
 // ============================================================================
-// 私有槽
+// 高亮当前行
 // ============================================================================
-
-void GCodeEditor::updateLineNumberAreaWidth(int newBlockCount)
-{
-    Q_UNUSED(newBlockCount)
-    setViewportMargins(lineNumberAreaWidth(), 0, 0, 0);
-}
 
 void GCodeEditor::highlightCurrentLine()
 {
-    // 由光标位置触发的当前行高亮（编辑模式）
     QList<QTextEdit::ExtraSelection> extraSelections;
 
     if (!isReadOnly()) {
         QTextEdit::ExtraSelection selection;
-        selection.format.setBackground(QColor(15, 52, 96, 100));
+        selection.format.setBackground(QColor(0x1a, 0x4a, 0x8a, 60));
         selection.format.setProperty(QTextFormat::FullWidthSelection, true);
         selection.cursor = textCursor();
         selection.cursor.clearSelection();
         extraSelections.append(selection);
     }
 
+    // 当前执行行高亮（绿色）
+    if (m_highlightedLine >= 0) {
+        QTextEdit::ExtraSelection execLine;
+        execLine.format.setBackground(QColor(0x00, 0x80, 0x00, 80));
+        execLine.format.setProperty(QTextFormat::FullWidthSelection, true);
+        execLine.cursor = document()->findBlockByLineNumber(m_highlightedLine);
+        extraSelections.append(execLine);
+    }
+
     setExtraSelections(extraSelections);
 }
 
-void GCodeEditor::updateLineNumberArea(const QRect &rect, int dy)
-{
-    if (dy) {
-        m_lineNumberArea->scroll(0, dy);
-    } else {
-        m_lineNumberArea->update(0, rect.y(), m_lineNumberArea->width(), rect.height());
-    }
+// ============================================================================
+// 事件处理
+// ============================================================================
 
-    if (rect.contains(viewport()->rect()))
-        updateLineNumberAreaWidth(0);
+void GCodeEditor::resizeEvent(QResizeEvent *event)
+{
+    QPlainTextEdit::resizeEvent(event);
+    QRect cr = contentsRect();
+    m_lineNumberArea->setGeometry(QRect(cr.left(), cr.top(),
+                                         lineNumberAreaWidth(), cr.height()));
 }
+
+// ============================================================================
+// MDI 命令
+// ============================================================================
 
 void GCodeEditor::onMdiSubmitted()
 {
@@ -198,35 +334,4 @@ void GCodeEditor::onMdiSubmitted()
         emit mdiCommandRequested(cmd);
         m_mdiInput->clear();
     }
-}
-
-// ============================================================================
-// UI 初始化
-// ============================================================================
-
-void GCodeEditor::setupUi()
-{
-    // 创建行号区域
-    m_lineNumberArea = new GCodeLineNumberArea(this);
-
-    // 编辑器设置
-    setFont(QFont(QStringLiteral("Consolas"), 11));
-    setLineWrapMode(QPlainTextEdit::NoWrap);
-    setReadOnly(true);
-    setPlaceholderText(QStringLiteral("在此加载 G 代码文件..."));
-
-    // 行号区域更新
-    connect(this, &GCodeEditor::blockCountChanged,
-            this, &GCodeEditor::updateLineNumberAreaWidth);
-    connect(this, &GCodeEditor::updateRequest,
-            this, &GCodeEditor::updateLineNumberArea);
-    connect(this, &GCodeEditor::cursorPositionChanged,
-            this, &GCodeEditor::highlightCurrentLine);
-
-    updateLineNumberAreaWidth(0);
-
-    // MDI 输入框（在编辑器底部）
-    // 注意：MDI 输入框由父组件的布局管理
-    // 这里我们创建一个独立的 MDI 输入区域
-    // 实际集成时，MDI 输入框放在主窗口的底部或工具栏中
 }
