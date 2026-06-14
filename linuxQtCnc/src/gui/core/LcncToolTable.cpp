@@ -1,10 +1,18 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt5 GUI 控制器
- * LcncToolTable - 刀具表管理器实现
- *
- * 在 Linux 上通过 NML 或共享内存访问刀具表。
- * 在 Windows 上使用模拟数据进行开发测试。
- */
+/********************************************************************
+* Description: LcncToolTable.cpp
+*   LcncToolTable — Tool Table Manager Implementation for
+*   linuxQtCnc. On Linux, tool table data is accessed via NML
+*   or shared memory. On Windows, simulated data is used for
+*   development testing.
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 
 #include "LcncToolTable.h"
 

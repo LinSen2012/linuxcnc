@@ -1,15 +1,22 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt5 GUI 控制器
- * LcncHalMonitor - HAL 信号监视器封装
- *
- * 封装 HAL 信号的读取和监视。
- * Windows 下使用模拟数据，Linux 下集成真实 HAL 通信。
- *
- * 在 Linux 上，HAL 信号通过共享内存访问，需要：
- * 1. 加载 HAL 库 (hal_lib.so)
- * 2. 通过 HAL API 读取信号值
- * 3. 使用定时器轮询更新
- */
+/********************************************************************
+* Description: LcncHalMonitor.h
+*   LcncHalMonitor — HAL Signal Monitor for linuxQtCnc.
+*   Encapsulates reading and monitoring of HAL signal values.
+*   On Windows, simulated data is used; on Linux, real HAL
+*   communication is integrated via shared memory.
+*   On Linux, HAL signals are accessed via shared memory:
+*   1. Load HAL library (hal_lib.so)
+*   2. Read signal values via the HAL API
+*   3. Use a timer for periodic polling updates
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 
 #ifndef LCNC_HAL_MONITOR_H
 #define LCNC_HAL_MONITOR_H

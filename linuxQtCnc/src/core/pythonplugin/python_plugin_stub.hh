@@ -1,13 +1,21 @@
+/********************************************************************
+* Description: python_plugin_stub.hh
+*   Stub header to replace pythonplugin/python_plugin.hh
+*   Python plugin system is disabled in linuxQtCnc (pure C/C++ CNC
+*   controller). The interpreter is 100% C++ (no Boost.Python, no
+*   PyCall). All plugin operations are no-ops.
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
+
 #ifndef PYTHON_PLUGIN_STUB_HH
 #define PYTHON_PLUGIN_STUB_HH
-
-// ============================================================================
-// Stub header to replace pythonplugin/python_plugin.hh
-//
-// Python plugin system is disabled in linuxQtCnc (pure C/C++ CNC controller).
-// The interpreter is 100% C++ (no Boost.Python, no PyCall).
-// All plugin operations are no-ops.
-// ============================================================================
 
 #include <string>
 

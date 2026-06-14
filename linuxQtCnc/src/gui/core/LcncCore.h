@@ -1,16 +1,21 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt6 GUI 控制器
- * LcncCore - NML 通信封装（核心单例）
- *
- * 封装与 LinuxCNC NML 服务器的通信，提供：
- * - 单例模式访问
- * - 连接/断开管理
- * - 定期状态轮询（QTimer）
- * - 命令发送接口
- * - 模拟模式支持（Windows 开发环境）
- *
- * 在 Windows 环境下使用模拟数据，实际 NML 连接留到 Linux 上集成。
- */
+/********************************************************************
+* Description: LcncCore.h
+*   LcncCore — NML Communication Core (singleton) for linuxQtCnc.
+*   Encapsulates communication with the LinuxCNC NML server,
+*   providing singleton access, connection management, periodic
+*   status polling (QTimer), command sending interface, and
+*   simulation mode support (for Windows development environment).
+*   On Windows, simulated data is used; real NML communication
+*   is integrated on Linux.
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 
 #ifndef LCNC_CORE_H
 #define LCNC_CORE_H

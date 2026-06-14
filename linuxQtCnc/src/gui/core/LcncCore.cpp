@@ -1,10 +1,18 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt5 GUI 控制器
- * LcncCore 实现
- *
- * NML 通信封装的核心实现。
- * Windows 环境下使用模拟数据，Linux 上集成真实 NML 通信。
- */
+/********************************************************************
+* Description: LcncCore.cpp
+*   LcncCore — NML Communication Core Implementation for
+*   linuxQtCnc. Core implementation of NML communication
+*   encapsulation. On Windows, simulated data is used; on Linux,
+*   real NML communication is integrated.
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 #include "LcncCore.h"
 
 #include <QCoreApplication>

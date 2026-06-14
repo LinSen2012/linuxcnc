@@ -1,9 +1,21 @@
+/********************************************************************
+* Description: pycallback_stub.hh
+*   Stub header to replace Boost.Python types used in rs274ngc.
+*   These stubs allow compilation without Boost.Python.
+*   The actual callback mechanism is reimplemented as pure C++
+*   in linuxQtCnc to keep the project dependency-free.
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
+
 #ifndef PYCALLBACK_STUB_HH
 #define PYCALLBACK_STUB_HH
-
-// Stub header to replace Boost.Python types used in rs274ngc
-// These stubs allow compilation without Boost.Python
-// The actual callback mechanism will be reimplemented as C++ in Phase 2
 
 #include <string>
 #include <vector>

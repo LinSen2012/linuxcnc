@@ -1,17 +1,26 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt5 GUI 控制器
- * LcncOffsetTable - 工件坐标系偏置表管理器
- *
- * 封装 LinuxCNC 坐标系偏置 (G54-G59.3) 的管理。
- * 每个坐标系存储 X/Y/Z/A/B/C/U/V/W 轴的偏置值。
- *
- * 继承 LinuxCNC 的逻辑：
- * - 坐标系索引：1=G54, 2=G55, 3=G56, 4=G57, 5=G58, 6=G59
- *               7=G59.1, 8=G59.2, 9=G59.3
- * - 坐标偏置存储在工件坐标系表中，由 INI 文件加载或在运行时设置
- * - 运行时也可通过 G10 L2 Pn X... Y... Z... 设置
- * - G92 偏置是临时的、叠加在当前坐标系上
- */
+/********************************************************************
+* Description: LcncOffsetTable.h
+*   LcncOffsetTable — Work Offset Table Manager for linuxQtCnc.
+*   Manages the LinuxCNC coordinate system offsets (G54-G59.3).
+*   Each coordinate system stores X/Y/Z/A/B/C/U/V/W axis offset
+*   values.
+*   Inherits the original LinuxCNC logic:
+*   - Coordinate indices: 1=G54, 2=G55, 3=G56, 4=G57, 5=G58, 6=G59
+*                      7=G59.1, 8=G59.2, 9=G59.3
+*   - Offsets are stored in the work coordinate system table,
+*     loaded from the INI file or set at runtime.
+*   - Can also be set via G10 L2 Pn X... Y... Z...
+*   - G92 offsets are temporary and overlay the current coordinate
+*     system.
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 
 #ifndef LCNC_OFFSET_TABLE_H
 #define LCNC_OFFSET_TABLE_H

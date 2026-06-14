@@ -1,3 +1,19 @@
+/********************************************************************
+* Description: posix_compat.h
+*   POSIX API compatibility layer for Windows (non-POSIX platforms).
+*   Provides mmap / munmap, dlopen / dlclose, pthread mutex/cond,
+*   getrusage, gettimeofday, unix-domain sockets, semaphores,
+*   and other POSIX primitives as drop-in replacements on Windows.
+*   Only used when NOT building on Linux/FreeBSD/macOS.
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 
 #ifndef POSIX_COMPAT_H
 #define POSIX_COMPAT_H

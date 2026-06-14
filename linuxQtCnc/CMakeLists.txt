@@ -307,6 +307,8 @@ if(BUILD_HAL)
         src/core/hal/components/streamer.c
         src/core/hal/components/streamer_usr.c
         src/core/hal/components/sim_encoder.c
+        src/core/hal/components/boss_plc.c
+        src/core/hal/components/weighted_sum.c
     )
     # panelui.c depends on Python.h (<Python.h>) and is a GUI helper - skip it.
     # src/core/hal/components/panelui.c intentionally excluded.

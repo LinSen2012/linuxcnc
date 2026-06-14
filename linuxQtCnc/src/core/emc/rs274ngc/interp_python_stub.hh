@@ -1,10 +1,23 @@
+/********************************************************************
+* Description: interp_python_stub.hh
+*   Stub header to replace interp_python.hh
+*   Python callbacks are replaced with pure C++ virtual function interfaces.
+*   This is a transitional stub — the actual callback mechanism
+*   will be implemented as C++ interfaces in Phase 2.
+*   In linuxQtCnc, all Python interpreter support is disabled
+*   (no Boost.Python, no PyCall mechanism).
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
+
 #ifndef INTERP_PYTHON_STUB_HH
 #define INTERP_PYTHON_STUB_HH
-
-// Stub header to replace interp_python.hh
-// Python callbacks are replaced with pure C++ virtual function interfaces
-// This is a transitional stub - the actual callback mechanism
-// will be implemented as C++ interfaces in Phase 2
 
 #include "interp_fwd.hh"
 

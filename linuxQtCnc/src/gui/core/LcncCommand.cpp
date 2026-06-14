@@ -1,10 +1,19 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt5 GUI 控制器
- * LcncCommand 实现
- *
- * 命令发送封装的实现。
- * Windows 环境下为接口桩实现，Linux 上集成真实 NML 命令发送。
- */
+/********************************************************************
+* Description: LcncCommand.cpp
+*   LcncCommand — NML Command Implementation for linuxQtCnc.
+*   Windows: stub interface.
+*   Linux: integrates real NML command sending.
+*   Command messages are constructed and written to the NML
+*   command channel for the LinuxCNC task controller.
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 
 #include "LcncCommand.h"
 

@@ -1,8 +1,20 @@
-
-/* =========================================================================
- * posix_compat.c — Windows 下 POSIX API 的最小实现
- * 仅在 Windows 下编译（通过 posix_compat.h 中的平台判断）
- * ========================================================================= */
+/********************************************************************
+* Description: posix_compat.c
+*   Minimal POSIX API implementations for Windows.
+*   Provides mmap / munmap, dlopen / dlsym, pthread mutex & cond
+*   variables, gettimeofday, getrusage, socket emulation and other
+*   POSIX primitives as Win32 replacements.
+*   Only compiled on Windows (guarded by platform checks in
+*   posix_compat.h).
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 
 #define POSIX_COMPAT_NO_REMAP
 #include "posix_compat.h"

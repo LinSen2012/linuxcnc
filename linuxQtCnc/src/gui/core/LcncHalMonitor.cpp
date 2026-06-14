@@ -1,10 +1,18 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt5 GUI 控制器
- * LcncHalMonitor - HAL 信号监视器实现
- *
- * 在 Linux 上通过 HAL API 读取真实信号值。
- * 在 Windows 上使用模拟数据进行开发测试。
- */
+/********************************************************************
+* Description: LcncHalMonitor.cpp
+*   LcncHalMonitor — HAL Signal Monitor Implementation for
+*   linuxQtCnc. Reads real signal values via the HAL API on
+*   Linux. On Windows, simulated data is used for development
+*   testing.
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 
 #include "LcncHalMonitor.h"
 

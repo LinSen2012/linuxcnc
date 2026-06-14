@@ -1,10 +1,19 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt6 GUI 控制器
- * LcncCommand - 命令发送接口
- *
- * 封装 NML 命令消息的构造和发送，提供类型安全的命令接口。
- * 在 Windows 环境下为接口定义，实际 NML 命令发送留到 Linux 上集成。
- */
+/********************************************************************
+* Description: LcncCommand.h
+*   LcncCommand - NML Command Interface for linuxQtCnc.
+*   Encapsulates the construction and sending of NML command
+*   messages, providing a type-safe command API.
+*   On Windows this provides the interface definition; the actual
+*   NML command sending is integrated on Linux.
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 
 #ifndef LCNC_COMMAND_H
 #define LCNC_COMMAND_H

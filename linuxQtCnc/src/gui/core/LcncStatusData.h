@@ -1,23 +1,26 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt6 GUI 控制器
- * LcncStatusData - 机床状态数据结构
- *
- * 定义 CNC 机床运行时的所有状态信息，包括：
- * - 机床状态（急停/开启/关闭）
- * - 运动模式（手动/自动/MDI）
- * - 解释器状态（空闲/运行/暂停）
- * - 坐标位置（绝对/相对/工件坐标系）
- * - 进给速率、主轴转速
- * - 当前 G/M/T 代码
- * - 刀具信息、限位开关状态等
- *
- * 使用 Q_GADGET 使其可在 QVariant 中传递，支持 Q_PROPERTY
- */
+/********************************************************************
+* Description: LcncStatusData.h
+*   LcncStatusData — CNC machine state data structure for
+*   linuxQtCnc. Defines all runtime state information for a CNC
+*   machine control: machine state (EStop/On/Off), motion mode
+*   (Manual/Auto/MDI), interpreter state (Idle/Running/Paused),
+*   position coordinates (absolute/relative/work), feed rate,
+*   spindle speed, current G/M/T codes, tool info, limit switch
+*   state, and more. Uses Q_GADGET for QVariant transport with
+*   Q_PROPERTY metadata.
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 
 #ifndef LCNC_STATUS_DATA_H
 #define LCNC_STATUS_DATA_H
 
-#include <QObject>
 #include <QString>
 #include <QVector>
 

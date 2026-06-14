@@ -1,21 +1,27 @@
-/*
- * linuxQtCncGui - LinuxCNC Qt5 GUI 控制器
- * LcncToolTable - 刀具表管理器
- *
- * 封装 LinuxCNC 刀具表的读取和管理。
- * 在 Linux 上通过 NML 或共享内存访问刀具表数据，
- * 在 Windows 上使用模拟数据进行开发测试。
- *
- * LinuxCNC 刀具表数据结构 (CANON_TOOL_TABLE):
- *   - toolno: 刀具号
- *   - pocketno: 刀位号
- *   - offset: 偏置 (EmcPose，包含 tran.xyz 和 a/b/c)
- *   - diameter: 直径
- *   - frontangle: 前角
- *   - backangle: 后角
- *   - orientation: 方向
- *   - comment: 注释
- */
+/********************************************************************
+* Description: LcncToolTable.h
+*   LcncToolTable — Tool Table Manager for linuxQtCnc.
+*   Encapsulates reading and management of the LinuxCNC tool table.
+*   On Linux, tool table data is accessed via NML or shared memory;
+*   on Windows, simulated data is used for development testing.
+*   LinuxCNC tool table data structure (CANON_TOOL_TABLE):
+*     - toolno: tool number
+*     - pocketno: pocket number
+*     - offset: offset (EmcPose, containing tran.xyz and a/b/c)
+*     - diameter: tool diameter
+*     - frontangle: front cutting angle
+*     - backangle: back cutting angle
+*     - orientation: tool orientation
+*     - comment: tool description text
+*
+*   Derived from a work by Fred Proctor & Will Shackleford
+*
+* Author: linuxQtCnc project
+* License: GPL Version 2
+* System: Linux / Windows
+*
+* Copyright (c) 2026 All rights reserved.
+********************************************************************/
 
 #ifndef LCNC_TOOL_TABLE_H
 #define LCNC_TOOL_TABLE_H
