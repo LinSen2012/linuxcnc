@@ -857,10 +857,12 @@ struct setup
 };
 
 
-// the externally visible singleton instance
+// python_plugin is defined in python_plugin_stub.hh (always nullptr in linuxQtCnc).
+// PYUSABLE is hardcoded to false because Python plugin is permanently disabled.
 
-extern class PythonPlugin *python_plugin;
-#define PYUSABLE (((python_plugin) != NULL) && (python_plugin->usable()))
+class PythonPlugin;
+extern PythonPlugin *python_plugin;
+#define PYUSABLE (false)
 
 inline bool is_a_cycle(int motion) {
     return ((motion > G_80) && (motion < G_90)) || (motion == G_73) || (motion == G_74);

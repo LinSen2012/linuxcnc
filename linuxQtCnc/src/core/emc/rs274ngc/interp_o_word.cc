@@ -180,9 +180,6 @@ int Interp::execute_call(setup_pointer settings,
 {
     int status = INTERP_OK;
     int i;
-#if 0 // Python disabled - boost::python code
-    bp::list plist;
-#endif
 
     context_pointer previous_frame = &settings->sub_context[settings->call_level-1];
 
@@ -278,43 +275,6 @@ int Interp::execute_call(setup_pointer settings,
 
 	break;
 
-#if 0 // Python disabled - entire CT_PYTHON_OWORD_SUB case uses boost::python
-    case CT_PYTHON_OWORD_SUB:
-	switch (settings->call_state) {
-	case CS_NORMAL:
-	    settings->return_value = 0.0;
-	    settings->value_returned = 0;
-	    previous_frame->sequence_number = settings->sequence_number;
-	    previous_frame->filename = strstore(settings->filename);
-	    plist.append(*settings->pythis); // self
-	    for(int i = 0; i < eblock->param_cnt; i++)
-		plist.append(eblock->params[i]); // positional args
-	    current_frame->pystuff.impl->tupleargs = bp::tuple(plist);
-	    current_frame->pystuff.impl->kwargs = bp::dict();
-	    /* Fallthrough */
-	case CS_REEXEC_PYOSUB:
-	    if (settings->call_state ==  CS_REEXEC_PYOSUB)
-		CHP(read_inputs(settings));
-	    status = pycall(settings, current_frame, OWORD_MODULE,
-			    current_frame->subName, 
-			    settings->call_state == CS_NORMAL ? PY_OWORDCALL : PY_FINISH_OWORDCALL);
-	    CHKS(status == INTERP_ERROR, "pycall(%s.%s) failed", OWORD_MODULE, current_frame->subName) ;
-	    switch (status = handler_returned(settings, current_frame, current_frame->subName, true)) {
-	    case INTERP_EXECUTE_FINISH:
-		settings->call_state = CS_REEXEC_PYOSUB;
-		break;
-	    default:
-		settings->call_state = CS_NORMAL;
-		settings->sequence_number = previous_frame->sequence_number;
-		CHP(status);
-		// M73 auto-restore is of dubious value in a Python subroutine
-		CHP(leave_context(settings,false)); 
-	    }
-	    break;
-	}
-	break;
-#endif // Python disabled
-
     case CT_REMAP:
 	block_pointer cblock = &CONTROLLING_BLOCK(*settings);
 	remap_pointer remap = cblock->executing_remap;
@@ -322,13 +282,8 @@ int Interp::execute_call(setup_pointer settings,
 	switch (settings->call_state) {
 	case CS_NORMAL:
 	    if (remap->remap_py || remap->prolog_func || remap->epilog_func) {
-		CHKS(!PYUSABLE, "%s (remapped) uses Python functions, but the Python plugin is not available", 
+		CHKS(true, "%s (remapped) uses Python functions, but the Python plugin is not available in linuxQtCnc", 
 		     remap->name);
-#if 0 // Python disabled - boost::python code
-		plist.append(*settings->pythis);   //self
-		current_frame->pystuff.impl->tupleargs = bp::tuple(plist);
-		current_frame->pystuff.impl->kwargs = bp::dict();
-#endif
 	    }
 	    if (remap->argspec && (strchr(remap->argspec, '@') == NULL)) {
 		// add_parameters will decorate kwargs as per argspec
@@ -1038,19 +993,12 @@ int Interp::convert_control_functions(block_pointer block, // pointer to a block
 	    //!!!KL the code below says.
 
 	    // mah: so?
-#if 0
-	    // we were not skipping -- start skipping
-	    logOword("start skipping forward: [%s] in 'elseif'",
-		     block->o_name);
-	    settings->skipping_o = block->o_name;
-	    settings->skipping_start = settings->sequence_number;
-	    return INTERP_OK;
-#else
-	    // we were skipping -- continue skipping
-	    logOword("continue skipping forward: [%s] in 'elseif'",
-		     block->o_name);
-	    return INTERP_OK;
-#endif
+    // linuxQtCnc: use the 'continue skipping' path - the 'start skipping'
+    // path has been disabled since the original LinuxCNC 2.7.x branch
+    // we were skipping -- continue skipping
+    logOword("continue skipping forward: [%s] in 'elseif'",
+	     block->o_name);
+    return INTERP_OK;
 	}
 
 	// we were skipping

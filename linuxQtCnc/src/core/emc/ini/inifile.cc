@@ -21,7 +21,7 @@
 
 #include <cerrno>
 #include <cstring>
-#include <fmt/format.h>
+#include "fmt_compat.h"
 
 #include <unistd.h>
 #include <fcntl.h>

@@ -53,9 +53,7 @@ static int endpoint_valid = 0;
 
 std::vector<queued_canon>& qc(void) {
     static std::vector<queued_canon> c;
-#if 0
-    printf("len %d\n", (int)c.size());
-#endif
+    // linuxQtCnc: debug printf removed
     return c;
 }
 

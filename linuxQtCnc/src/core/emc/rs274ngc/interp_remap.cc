@@ -106,9 +106,6 @@ int Interp::convert_remapped_code(block_pointer /*block*/,
     char key[2];
     int status;
     block_pointer cblock;
-#if 0 // Python disabled - boost::python code (unused variable)
-    bp::list plist;
-#endif
     char cmd[LINELEN];
 
     if (number == -1)
@@ -262,20 +259,7 @@ int Interp::add_parameters(setup_pointer settings,
     auto STORE
     {
         [&](const char* name, double value) -> void {
-#if 0 // Python disabled - boost::python code
-            if (pydict) {
-                try {
-                    active_frame->pystuff.impl->kwargs[name] = value;
-                }
-                catch (const bp::error_already_set&) {
-                    PyErr_Print();
-                    PyErr_Clear();
-                    ERM("add parameters: can't add '%s' to args", name);
-                    interp_error = true;
-                    return;
-                }
-            }
-#endif
+            // linuxQtCnc: Python kwargs disabled - pystuff path not available
             if (posarglist) {
                 char actual[LINELEN];
                 snprintf(actual, sizeof(actual), "[%.4lf]", value);

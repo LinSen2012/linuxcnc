@@ -21,7 +21,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <boost/noncopyable.hpp>
 #include <emcpos.h>
 #include "modal_state.hh"
 
@@ -30,8 +29,11 @@
 #define ACTIVE_M_CODES 10
 #define ACTIVE_SETTINGS 5
 
-class InterpBase : boost::noncopyable {
+class InterpBase {
 public:
+    InterpBase() = default;
+    InterpBase(const InterpBase&) = delete;
+    InterpBase& operator=(const InterpBase&) = delete;
     virtual ~InterpBase();
     virtual char *error_text(int errcode, char *buf, size_t buflen) = 0;
     virtual char *line_text(char *buf, size_t buflen) = 0;

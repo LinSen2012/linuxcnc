@@ -14,7 +14,7 @@
 * Last change: created 30/12/21
 ********************************************************************/
 
-#include <fmt/format.h>
+#include "fmt_compat.h"
 
 #include "nml_intf/emc.hh"
 #include "libnml/rcs/rcs_print.hh"

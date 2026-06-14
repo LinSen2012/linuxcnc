@@ -9,8 +9,6 @@
 #include <vector>
 #include <stdexcept>
 
-namespace bp = boost::python;  // NOT defined - see below
-
 // Minimal stub namespace to replace boost::python for compilation
 namespace pycallback {
 

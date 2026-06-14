@@ -12,7 +12,7 @@
 ********************************************************************/
 
 #include <stdlib.h>
-#include <fmt/format.h>
+#include "fmt_compat.h"
 
 #include "nml_intf/emc.hh"
 #include <emcpos.h>

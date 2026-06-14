@@ -17,12 +17,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
-#ifndef BOOST_PYTHON_MAX_ARITY
-#define BOOST_PYTHON_MAX_ARITY 4
-#endif
 #include <string.h>
 #include "rs274ngc_interp.hh"
-#include <boost/python/object.hpp>
 
 setup::setup() :
     AA_axis_offset(0.0),

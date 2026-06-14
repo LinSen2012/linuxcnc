@@ -1,10 +1,35 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.12)
 project(linuxQtCnc VERSION 0.1.0 LANGUAGES C CXX)
 
 # ============================================================================
 # linuxQtCnc - LinuxCNC Qt/C++ Refactored CNC Controller
 # Phase 1: C/C++ Core Module Inheritance (Compilation-Ready)
 # ============================================================================
+
+# ============================================================================
+# Platform Detection & Workarounds
+# ============================================================================
+set(LQTCNC_IS_WINDOWS OFF)
+set(LQTCNC_IS_LINUX OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows" OR WIN32)
+    set(LQTCNC_IS_WINDOWS ON)
+    message(STATUS "Detected platform: Windows - building MINIMAL core subset (no Linux RT/HAL drivers)")
+    # Windows 专属编译定义
+    add_compile_definitions(LQTCNC_WINDOWS=1)
+    add_compile_definitions(_WIN32_WINNT=0x0601)  # Win7+
+    add_compile_definitions(WIN32_LEAN_AND_MEAN)
+    add_compile_definitions(NOMINMAX)
+    # Windows 下默认关闭 Linux 专属模块
+    set(BUILD_RTAPI OFF CACHE BOOL "" FORCE)
+    set(BUILD_MOTION OFF CACHE BOOL "" FORCE)
+    set(BUILD_TP OFF CACHE BOOL "" FORCE)
+    set(BUILD_HALCMD OFF CACHE BOOL "" FORCE)
+    set(BUILD_BACKEND OFF CACHE BOOL "" FORCE)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(LQTCNC_IS_LINUX ON)
+    add_compile_definitions(_GNU_SOURCE=1)
+    message(STATUS "Detected platform: Linux - building FULL core + realtime modules")
+endif()
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -37,10 +62,35 @@ option(BUILD_TASK        "Build task controller"           ON)
 option(BUILD_MOTION      "Build motion controller"         ON)
 option(BUILD_TP          "Build trajectory planner"        ON)
 option(BUILD_KINEMATICS  "Build kinematics modules"        ON)
-option(BUILD_TOOLDATA    "Build tool data management"      ON)
+option(BUILD_TOOLDATA    "Build tool data management"       ON)
 option(BUILD_HALCMD      "Build HAL command-line tool"     ON)
 option(BUILD_BACKEND     "Build backend tools (halui etc)"  ON)
+option(BUILD_GUI         "Build Qt5 GUI application"       ON)
 option(ULAPI_BUILD       "Build user-space API (not kernel)" ON)
+
+# ============================================================================
+# Qt5 / Qt6 detection (Windows priority path)
+# On Windows, CMake's find_package may not find Qt if installed under
+# C:\Qt\5.12.3\mingw73_64.  Set CMAKE_PREFIX_PATH in the Qt Creator
+# Kits panel, or use the fallback list below.
+# ============================================================================
+if(LQTCNC_IS_WINDOWS AND BUILD_GUI)
+    # Common Qt5 install roots on Windows (try in order, first hit wins)
+    set(_QT5_PREFIXES
+        "D:/Qt/Qt5.12.3/5.12.3/msvc2017"    # user's confirmed install
+        "D:/Qt/Qt5.12.3/5.12.3/mingw73_64"
+        "D:/Qt/Qt5.12.3"
+    )
+    foreach(_prefix ${_QT5_PREFIXES})
+        if(EXISTS "${_prefix}/lib/cmake/Qt5/Qt5Config.cmake")
+            list(INSERT CMAKE_PREFIX_PATH 0 "${_prefix}")
+            message(STATUS "Qt5 found at: ${_prefix}")
+            break()
+        endif()
+    endforeach()
+    unset(_QT5_PREFIXES)
+    unset(_prefix)
+endif()
 
 # ============================================================================
 # Feature Detection (replaces autotools configure checks)
@@ -50,13 +100,17 @@ include(CheckIncludeFileCXX)
 include(CheckFunctionExists)
 include(CheckLibraryExists)
 
-check_include_file("sys/io.h"        HAVE_SYS_IO_H)
-check_include_file("dlfcn.h"         HAVE_DLFCN_H)
+if(NOT LQTCNC_IS_WINDOWS)
+    # Linux 专属头仅在 Linux 下检测
+    check_include_file("sys/io.h"           HAVE_SYS_IO_H)
+    check_include_file("dlfcn.h"            HAVE_DLFCN_H)
+    check_function_exists("clock_nanosleep" HAVE_CLOCK_NANOSLEEP)
+    check_function_exists("sem_timedwait"   HAVE_SEMTIMEDOP)
+    check_library_exists("rt" "clock_nanosleep" "" HAVE_RT_CLOCK_NANOSLEEP)
+endif()
+
 check_include_file("locale.h"         HAVE_LOCALE_H)
 check_include_file("libintl.h"        HAVE_LIBINTL_H)
-check_function_exists("clock_nanosleep"  HAVE_CLOCK_NANOSLEEP)
-check_function_exists("sem_timedwait"    HAVE_SEMTIMEDOP)
-check_library_exists("rt" "clock_nanosleep" "" HAVE_RT_CLOCK_NANOSLEEP)
 
 # Check for gettext (i18n support)
 find_package(Intl QUIET)
@@ -84,26 +138,53 @@ configure_file(
 install(FILES ${CMAKE_BINARY_DIR}/generated/config.h DESTINATION include/linuxcnc)
 
 # ============================================================================
-# Compiler Flags
+# Compiler Flags (MSVC vs GCC/Clang)
 # ============================================================================
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
+if(MSVC)
+    # MSVC uses /W-style warnings
+    add_compile_options(/W3 /EHsc /permissive-)
+    # MSVC-specific definitions for CRT
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+    add_compile_definitions(_CRT_NONSTDC_NO_WARNINGS)
+else()
+    # GCC / Clang use -W-style warnings
+    add_compile_options(-Wall -Wextra -fPIC)
+endif()
 
 if(ULAPI_BUILD)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DULAPI")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DULAPI")
+    add_compile_definitions(ULAPI)
 endif()
 
 # ============================================================================
 # Find External Dependencies
 # ============================================================================
+# fmt: used by inifile.cc for formatted error messages.
+# On Windows, gracefully fall back to a header-only stub if the library
+# cannot be found, so developers don't need to install vcpkg to try.
 find_package(fmt QUIET)
-if(NOT fmt_FOUND)
-    message(STATUS "fmt library not found, ini module will use fallback")
+if(fmt_FOUND)
+    message(STATUS "fmt library found: ${fmt_VERSION}")
+    set(HAVE_FMT 1)
+    add_compile_definitions(HAVE_FMT=1)
+else()
+    set(HAVE_FMT 0)
+    message(STATUS "fmt library NOT found - inifile.cc will use printf-style fallback")
+endif()
+
+# Boost: required for real-time uspace_rtapi_main.cc (boost::lockfree::queue).
+# On Windows this path is excluded (BUILD_RTAPI=OFF), so Boost is optional.
+# Only the headers are needed; SYSTEM suppresses Boost warnings.
+if(NOT LQTCNC_IS_WINDOWS)
+    find_package(Boost REQUIRED)
+    if(Boost_FOUND)
+        message(STATUS "Boost headers found (version ${Boost_VERSION}); target Boost::boost available")
+    endif()
+else()
+    message(STATUS "Boost: not required on Windows (BUILD_RTAPI disabled)")
 endif()
 
 # Threads (needed by several modules)
-find_package(Threads QUIET)
+find_package(Threads REQUIRED)
 
 # ============================================================================
 # Global Include Directories
@@ -160,7 +241,7 @@ endfunction()
 # ============================================================================
 # Module: RTAPI (Real-Time Application Programming Interface)
 # ============================================================================
-if(BUILD_RTAPI)
+if(BUILD_RTAPI AND NOT LQTCNC_IS_WINDOWS)
     file(GLOB_RECURSE RTAPI_SOURCES
         src/core/rtapi/*.c
         src/core/rtapi/*.cc
@@ -177,6 +258,8 @@ if(BUILD_RTAPI)
         $<$<BOOL:${ULAPI_BUILD}>:ULAPI>
         $<$<BOOL:${ULAPI_BUILD}>:RTAPI_USPACE>
     )
+    # Boost (lockfree queue in uspace_rtapi_main.cc) - header only
+    target_link_libraries(lqt_rtapi PRIVATE Boost::boost)
     lqt_add_common_deps(lqt_rtapi)
     message(STATUS "RTAPI: ${RTAPI_SOURCES} files")
 endif()
@@ -194,34 +277,118 @@ if(BUILD_HAL)
     target_link_libraries(lqt_hal PRIVATE
         $<$<TARGET_EXISTS:lqt_rtapi>:lqt_rtapi>
         ${CMAKE_DL_LIBS}
-        rt
+        $<$<NOT:$<BOOL:${LQTCNC_IS_WINDOWS}>>:rt>
     )
     message(STATUS "HAL core: ${HAL_CORE_SOURCES}")
+
+    # ------------------------------------------------------------------
+    # HAL components: each .c is compiled into a standalone loadable module
+    # ------------------------------------------------------------------
+    set(HAL_COMPONENT_SOURCES
+        src/core/hal/components/pid.c
+        src/core/hal/components/stepgen.c
+        src/core/hal/components/encoder.c
+        src/core/hal/components/encoder_ratio.c
+        src/core/hal/components/siggen.c
+        src/core/hal/components/pwmgen.c
+        src/core/hal/components/counter.c
+        src/core/hal/components/debounce.c
+        src/core/hal/components/threads.c
+        src/core/hal/components/watchdog.c
+        src/core/hal/components/supply.c
+        src/core/hal/components/modmath.c
+        src/core/hal/components/mux_generic.c
+        src/core/hal/components/demux_generic.c
+        src/core/hal/components/enum.c
+        src/core/hal/components/lcd.c
+        src/core/hal/components/matrix_kb.c
+        src/core/hal/components/sampler.c
+        src/core/hal/components/sampler_usr.c
+        src/core/hal/components/streamer.c
+        src/core/hal/components/streamer_usr.c
+        src/core/hal/components/sim_encoder.c
+    )
+    # panelui.c depends on Python.h (<Python.h>) and is a GUI helper - skip it.
+    # src/core/hal/components/panelui.c intentionally excluded.
+
+    foreach(comp_src ${HAL_COMPONENT_SOURCES})
+        get_filename_component(comp_name ${comp_src} NAME_WE)
+        add_library(hal_${comp_name} MODULE ${comp_src})
+        lqt_add_common_includes(hal_${comp_name})
+        target_link_libraries(hal_${comp_name} PRIVATE
+            $<$<TARGET_EXISTS:lqt_rtapi>:lqt_rtapi>
+            ${CMAKE_DL_LIBS}
+        )
+        set_target_properties(hal_${comp_name} PROPERTIES
+            PREFIX ""
+            OUTPUT_NAME ${comp_name}
+            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/hal
+        )
+    endforeach()
+    message(STATUS "HAL components: ${HAL_COMPONENT_SOURCES}")
 endif()
 
 # ============================================================================
 # Module: libnml (NML Communication Library)
 # ============================================================================
 if(BUILD_LIBNML)
-    file(GLOB_RECURSE LIBNML_SOURCES
-        src/core/libnml/buffer/*.cc
-        src/core/libnml/cms/*.cc
-        src/core/libnml/linklist/*.cc
-        src/core/libnml/nml/*.cc
-        src/core/libnml/os_intf/*.cc
-        src/core/libnml/os_intf/_*.c
-        src/core/libnml/posemath/*.cc
-        src/core/libnml/rcs/*.cc
-        src/core/libnml/buffer/*.c
-        src/core/libnml/os_intf/*.c
+    # 公共源（不受平台影响）
+    set(LIBNML_COMMON_SOURCES
+        src/core/libnml/buffer/locmem.cc
+        src/core/libnml/buffer/memsem.cc
+        src/core/libnml/buffer/phantom.cc
+        src/core/libnml/buffer/physmem.cc
+        src/core/libnml/buffer/recvn.c
+        src/core/libnml/buffer/shmem.cc
+        src/core/libnml/buffer/tcpmem.cc
+        src/core/libnml/buffer/sendn.c
+        src/core/libnml/cms/cms.cc
+        src/core/libnml/cms/cms_aup.cc
+        src/core/libnml/cms/cms_cfg.cc
+        src/core/libnml/cms/cms_dup.cc
+        src/core/libnml/cms/cms_in.cc
+        src/core/libnml/cms/cms_pm.cc
+        src/core/libnml/cms/cms_srv.cc
+        src/core/libnml/cms/cms_up.cc
+        src/core/libnml/cms/tcp_opts.cc
+        src/core/libnml/cms/tcp_srv.cc
+        src/core/libnml/linklist/linklist.cc
+        src/core/libnml/nml/cmd_msg.cc
+        src/core/libnml/nml/nml.cc
+        src/core/libnml/nml/nml_oi.cc
+        src/core/libnml/nml/nml_srv.cc
+        src/core/libnml/rcs/rcs_exit.cc
+        src/core/libnml/rcs/rcs_print.cc
+        src/core/libnml/os_intf/inetnull.cc
+        src/core/libnml/os_intf/timer.cc
     )
+
+    # os_intf 平台差异部分
+    if(NOT LQTCNC_IS_WINDOWS)
+        set(LIBNML_OS_SOURCES
+            src/core/libnml/os_intf/_sem.c
+            src/core/libnml/os_intf/_shm.c
+            src/core/libnml/os_intf/_timer.c
+            src/core/libnml/os_intf/shm.cc
+            src/core/libnml/os_intf/sem.cc
+        )
+    else()
+        set(LIBNML_OS_SOURCES
+            src/core/posix_compat/posix_compat.c
+        )
+    endif()
+
+    set(LIBNML_SOURCES ${LIBNML_COMMON_SOURCES} ${LIBNML_OS_SOURCES})
 
     add_library(lqt_nml SHARED ${LIBNML_SOURCES})
     lqt_add_common_includes(lqt_nml)
     target_link_libraries(lqt_nml PRIVATE
         $<$<TARGET_EXISTS:lqt_hal>:lqt_hal>
-        ${CMAKE_DL_LIBS}
+        $<$<NOT:$<BOOL:${LQTCNC_IS_WINDOWS}>>:${CMAKE_DL_LIBS}>
     )
+    if(LQTCNC_IS_WINDOWS)
+        target_link_libraries(lqt_nml PRIVATE ws2_32)
+    endif()
     message(STATUS "libnml: ${LIBNML_SOURCES} files")
 endif()
 
@@ -235,7 +402,9 @@ if(BUILD_LIBNML)
     )
     add_library(lqt_posemath SHARED ${POSEMATH_SOURCES})
     lqt_add_common_includes(lqt_posemath)
-    target_link_libraries(lqt_posemath PRIVATE m)
+    target_link_libraries(lqt_posemath PRIVATE
+        $<$<NOT:$<BOOL:${LQTCNC_IS_WINDOWS}>>:m>
+    )
     message(STATUS "posemath: ${POSEMATH_SOURCES} files")
 endif()
 
@@ -261,9 +430,10 @@ if(BUILD_EMC_CORE)
     add_library(lqt_ini SHARED ${EMC_INI_SOURCES})
     lqt_add_common_includes(lqt_ini)
     if(fmt_FOUND)
-        target_link_libraries(lqt_ini PRIVATE fmt::fmt)
+        target_link_libraries(lqt_ini PRIVATE fmt::fmt ${CMAKE_DL_LIBS})
+    else()
+        target_link_libraries(lqt_ini PRIVATE ${CMAKE_DL_LIBS})
     endif()
-    target_link_libraries(lqt_ini PRIVATE ${CMAKE_DL_LIBS})
 
     message(STATUS "EMC core (nml_intf): ${EMC_NML_SOURCES} files")
     message(STATUS "INI: ${EMC_INI_SOURCES} files")
@@ -277,7 +447,7 @@ if(BUILD_INTERP)
         src/core/emc/rs274ngc/*.cc
     )
     # Exclude Python binding files (pure Boost.Python wrappers)
-    list(FILTER INTERP_SOURCES EXCLUDE REGEX ".*interp_python.*")
+    list(FILTER INTERP_SOURCES EXCLUDE REGEX ".*interp_python\\.cc$")
     list(FILTER INTERP_SOURCES EXCLUDE REGEX ".*canonmodule.*")
     list(FILTER INTERP_SOURCES EXCLUDE REGEX ".*gcodemodule.*")
     list(FILTER INTERP_SOURCES EXCLUDE REGEX ".*interpmodule.*")
@@ -317,9 +487,10 @@ endif()
 # ============================================================================
 # Module: Trajectory Planner (TP)
 # ============================================================================
-if(BUILD_TP)
+if(BUILD_TP AND NOT LQTCNC_IS_WINDOWS)
     file(GLOB TP_SOURCES
         src/core/emc/tp/*.c
+        src/core/emc/tp/cruckig/*.c
     )
 
     add_library(lqt_tp STATIC ${TP_SOURCES})
@@ -331,7 +502,7 @@ endif()
 # ============================================================================
 # Module: Motion Controller
 # ============================================================================
-if(BUILD_MOTION)
+if(BUILD_MOTION AND NOT LQTCNC_IS_WINDOWS)
     file(GLOB MOTION_SOURCES
         src/core/emc/motion/*.c
         src/core/emc/motion/*.cc
@@ -348,23 +519,90 @@ endif()
 
 # ============================================================================
 # Module: Kinematics
+#
+# Each kinematics module exposes a standalone HAL module, compiled as a single shared MODULE.
+# Helper source files (cubic.c / kins_util.c / genserfuncs.c / trtfuncs.c /
+# userkfuncs.c) are compiled into a common static library and linked into every
+# genserkins-family modules.
 # ============================================================================
 if(BUILD_KINEMATICS)
-    file(GLOB KINS_SOURCES
-        src/core/emc/kinematics/*.c
-        src/core/emc/kinematics/*.cc
+    # Common helper sources (not standalone modules; shared by multiple kinematics)
+    set(KINS_COMMON_SOURCES
+        src/core/emc/kinematics/cubic.c
+        src/core/emc/kinematics/kins_util.c
+        src/core/emc/kinematics/genserfuncs.c
+        src/core/emc/kinematics/trtfuncs.c
+        src/core/emc/kinematics/userkfuncs.c
     )
-    # Exclude Boost.Python-only kinematics modules (disabled in linuxQtCnc)
-    list(FILTER KINS_SOURCES EXCLUDE REGEX ".*rotarydeltakins\\.cc$")
-    list(FILTER KINS_SOURCES EXCLUDE REGEX ".*lineardeltakins\\.cc$")
-
-    add_library(lqt_kinematics MODULE ${KINS_SOURCES})
-    lqt_add_common_includes(lqt_kinematics)
-    target_link_libraries(lqt_kinematics PRIVATE
+    add_library(lqt_kins_common STATIC ${KINS_COMMON_SOURCES})
+    lqt_add_common_includes(lqt_kins_common)
+    target_link_libraries(lqt_kins_common PRIVATE
         $<$<TARGET_EXISTS:lqt_posemath>:lqt_posemath>
-        m
+        $<$<NOT:$<BOOL:${LQTCNC_IS_WINDOWS}>>:m>
     )
-    message(STATUS "kinematics: ${KINS_SOURCES} files")
+    set_target_properties(lqt_kins_common PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+    # Standalone kinematics modules (each file = one .so)
+    set(KINS_MODULE_SOURCES
+        trivkins
+        genserkins
+        genhexkins
+        pentakins
+        pumakins
+        maxkins
+        5axiskins
+        ugenserkins
+        rosekins
+        rotatekins
+        scarakins
+        scorbot-kins
+        switchkins
+        tripodkins
+        corexykins
+        rotarydeltakins
+        lineardeltakins
+        xyzac-trt-kins
+        xyzbc-trt-kins
+    )
+
+    # Modules that depend on one of the helper sources above
+    # (genserkins family uses cubic.c/genserfuncs.c/kins_util.c;
+    #  xyz*ac/xyz*bc-trt-kins and scorbot-kins use trtfuncs.c;
+    #  scorbot-kins additionally uses userkfuncs.c)
+    set(KINS_WITH_COMMON
+        genserkins genhexkins pentakins pumakins maxkins 5axiskins ugenserkins
+        rosekins scorbot-kins tripodkins xyzac-trt-kins xyzbc-trt-kins
+    )
+
+    foreach(kins ${KINS_MODULE_SOURCES})
+        # Strip trailing comments and validate file exists
+        set(_src ${CMAKE_SOURCE_DIR}/src/core/emc/kinematics/${kins}.c)
+        if(NOT EXISTS ${_src})
+            message(WARNING "Kinematics source ${kins}.c not found, skipping")
+            continue()
+        endif()
+        add_library(${kins} MODULE ${_src})
+        lqt_add_common_includes(${kins})
+        # link common helpers for modules that depend on them
+        list(FIND KINS_WITH_COMMON ${kins} _idx)
+        if(NOT _idx EQUAL -1)
+            target_link_libraries(${kins} PRIVATE
+                lqt_kins_common
+                $<$<TARGET_EXISTS:lqt_posemath>:lqt_posemath>
+                $<$<NOT:$<BOOL:${LQTCNC_IS_WINDOWS}>>:m>
+            )
+        else()
+            target_link_libraries(${kins} PRIVATE
+                $<$<NOT:$<BOOL:${LQTCNC_IS_WINDOWS}>>:m>
+            )
+        endif()
+        set_target_properties(${kins} PROPERTIES
+            PREFIX ""
+            OUTPUT_NAME ${kins}
+            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/kins
+        )
+    endforeach()
+    message(STATUS "Kinematics modules: ${KINS_MODULE_SOURCES}")
 endif()
 
 # ============================================================================
@@ -386,20 +624,39 @@ if(BUILD_TASK)
         $<$<TARGET_EXISTS:lqt_ini>:lqt_ini>
         $<$<TARGET_EXISTS:lqt_tooldata>:lqt_tooldata>
         ${CMAKE_DL_LIBS}
-        rt
+        $<$<NOT:$<BOOL:${LQTCNC_IS_WINDOWS}>>:rt>
     )
     message(STATUS "task (milltask): ${TASK_SOURCES} files")
 endif()
 
 # ============================================================================
 # Module: HALCMD (HAL Command-Line Tool)
+#
+# src/core/hal/utils/ contains several loosely-coupled tools:
+#   halcmd      : the main command-line HAL shell (the classic "halcmd")
+#   halsh       : a read-only shell for inspecting an already-running HAL
+#   halrmt      : remote-HAL client tool
+#   meter       : simple real-time signal meter
+#   scope_*     : oscilloscope GUI (GTK-based; optional)
+#   upci / pci_*: userspace PCI helpers (for mesa-hostmot2 / parport)
+#   bitfile     : shared helper for FPGA bitfile handling
+#   miscgtk     : shared GTK widget helpers for scope/meter
+#
+# P1: keep only halcmd / halsh / halrmt compiling. scope/meter/pci/miscgtk
+# depend on GTK and are disabled at this stage (add a GTK cmake find_package
+# to enable them later, together with the Qt GUI).
 # ============================================================================
-if(BUILD_HALCMD)
-    file(GLOB HALCMD_SOURCES
-        src/tools/halcmd/*.c
-        src/tools/halcmd/*.cc
-    )
+if(BUILD_HALCMD AND NOT LQTCNC_IS_WINDOWS)
+    set(HALCMD_ROOT src/core/hal/utils)
 
+    # ---------- lqt_halcmd (primary command-line tool) ----------
+    set(HALCMD_SOURCES
+        ${HALCMD_ROOT}/halcmd_main.c
+        ${HALCMD_ROOT}/halcmd.c
+        ${HALCMD_ROOT}/halcmd_commands.cc
+        ${HALCMD_ROOT}/halcmd_completion.c
+        ${HALCMD_ROOT}/bitfile.c
+    )
     add_executable(lqt_halcmd ${HALCMD_SOURCES})
     lqt_add_common_includes(lqt_halcmd)
     target_link_libraries(lqt_halcmd PRIVATE
@@ -408,36 +665,116 @@ if(BUILD_HALCMD)
         ${CMAKE_DL_LIBS}
         rt
     )
-    message(STATUS "halcmd: ${HALCMD_SOURCES} files")
+
+    # ---------- lqt_halsh (read-only shell) ----------
+    add_executable(lqt_halsh
+        ${HALCMD_ROOT}/halsh.c
+    )
+    lqt_add_common_includes(lqt_halsh)
+    target_link_libraries(lqt_halsh PRIVATE
+        $<$<TARGET_EXISTS:lqt_hal>:lqt_hal>
+        $<$<TARGET_EXISTS:lqt_ini>:lqt_ini>
+        ${CMAKE_DL_LIBS}
+        rt
+    )
+
+    # ---------- lqt_halrmt (remote HAL client) ----------
+    add_executable(lqt_halrmt
+        ${HALCMD_ROOT}/halrmt.c
+    )
+    lqt_add_common_includes(lqt_halrmt)
+    target_link_libraries(lqt_halrmt PRIVATE
+        $<$<TARGET_EXISTS:lqt_hal>:lqt_hal>
+        $<$<TARGET_EXISTS:lqt_ini>:lqt_ini>
+        ${CMAKE_DL_LIBS}
+        rt
+    )
+
+    message(STATUS "halcmd: ${HALCMD_SOURCES}")
+    message(STATUS "halsh + halrmt (P1 enabled)")
+    message(STATUS "  (scope/meter/pci/miscgtk disabled - require GTK; enable when Qt GUI is ready)")
 endif()
 
 # ============================================================================
 # Module: Backend Tools (halui, emcsh, etc.)
+#
+# These programs communicate with the running task controller via NML
+# and the HAL. GTK-based frontends (halui etc.) are currently skipped in
+# favour of the future Qt GUI (see src/gui/). Only emcsh/emcrsh are kept
+# because they are pure-C/text socket interfaces useful for scripting.
 # ============================================================================
-if(BUILD_BACKEND)
-    file(GLOB BACKEND_SOURCES
-        src/tools/backend/*.c
-        src/tools/backend/*.cc
+if(BUILD_BACKEND AND NOT LQTCNC_IS_WINDOWS)
+    set(BACKEND_ROOT src/tools/backend)
+
+    # emcsh: scriptable NML shell
+    add_executable(lqt_emcsh
+        ${BACKEND_ROOT}/emcsh.cc
+        ${BACKEND_ROOT}/shcom.cc
+        ${BACKEND_ROOT}/sockets.c
+    )
+    lqt_add_common_includes(lqt_emcsh)
+    target_link_libraries(lqt_emcsh PRIVATE
+        $<$<TARGET_EXISTS:lqt_emc_core>:lqt_emc_core>
+        $<$<TARGET_EXISTS:lqt_nml>:lqt_nml>
+        $<$<TARGET_EXISTS:lqt_hal>:lqt_hal>
+        $<$<TARGET_EXISTS:lqt_ini>:lqt_ini>
+        $<$<TARGET_EXISTS:lqt_tooldata>:lqt_tooldata>
+        ${CMAKE_DL_LIBS}
     )
 
-    if(BACKEND_SOURCES)
-        add_executable(lqt_halui ${BACKEND_SOURCES})
-        lqt_add_common_includes(lqt_halui)
-        target_link_libraries(lqt_halui PRIVATE
-            $<$<TARGET_EXISTS:lqt_emc_core>:lqt_emc_core>
-            $<$<TARGET_EXISTS:lqt_nml>:lqt_nml>
-            $<$<TARGET_EXISTS:lqt_hal>:lqt_hal>
-            $<$<TARGET_EXISTS:lqt_ini>:lqt_ini>
-            $<$<TARGET_EXISTS:lqt_tooldata>:lqt_tooldata>
-            ${CMAKE_DL_LIBS}
-        )
-        message(STATUS "backend tools: ${BACKEND_SOURCES} files")
-    endif()
+    # emcrsh: remote NML server (similar to emcsh but listens on a TCP socket)
+    add_executable(lqt_emcrsh
+        ${BACKEND_ROOT}/emcrsh.cc
+        ${BACKEND_ROOT}/shcom.cc
+        ${BACKEND_ROOT}/sockets.c
+        ${BACKEND_ROOT}/schedrmt.cc
+        ${BACKEND_ROOT}/emcsched.cc
+    )
+    lqt_add_common_includes(lqt_emcrsh)
+    target_link_libraries(lqt_emcrsh PRIVATE
+        $<$<TARGET_EXISTS:lqt_emc_core>:lqt_emc_core>
+        $<$<TARGET_EXISTS:lqt_nml>:lqt_nml>
+        $<$<TARGET_EXISTS:lqt_hal>:lqt_hal>
+        $<$<TARGET_EXISTS:lqt_ini>:lqt_ini>
+        $<$<TARGET_EXISTS:lqt_tooldata>:lqt_tooldata>
+        ${CMAKE_DL_LIBS}
+    )
+
+    message(STATUS "backend tools: emcsh + emcrsh")
+    message(STATUS "  (halui/emclcd/mapini/emcsched: GTK based; disabled until Qt GUI ready)")
 endif()
 
 # ============================================================================
-# Build Configuration Summary
+# Module: Qt5 GUI Application
+#
+# The GUI is a thin C++ wrapper around the linuxCNC core libraries (NML/HAL/
+# motion/task).  On Windows it is the PRIMARY deliverable; on Linux it
+# supplements the headless CLI tools.
 # ============================================================================
+if(BUILD_GUI)
+    # Tell gui/CMakeLists.txt that we are being included from the root,
+    # so it uses the correct relative path to src/core.
+    set(LQTCNC_ROOT_BUILD ON)
+    add_subdirectory(src/gui)
+
+    # On Windows, also try to pick up Qt5 from the standard install location.
+    # (CMAKE_PREFIX_PATH propagates automatically into subdirectories;
+    #  we additionally append the Windows-specific fallback path.)
+    if(LQTCNC_IS_WINDOWS)
+        list(APPEND CMAKE_PREFIX_PATH
+             "D:/Qt/Qt5.12.3/5.12.3/msvc2017"
+             "D:/Qt/Qt5.12.3/5.12.3/mingw73_64")
+    endif()
+endif()
+# ============================================================================
+# Platform string (cmake 3.12-compatible: use if-else, not $<IF:>)
+# ============================================================================
+if(LQTCNC_IS_WINDOWS)
+    set(LQTCNC_PLATFORM_STR "Windows (minimal)")
+else()
+    set(LQTCNC_PLATFORM_STR "Linux (full)")
+endif()
+
 message(STATUS "")
 message(STATUS "=============================================================")
 message(STATUS " linuxQtCnc Build Configuration Summary")
@@ -450,6 +787,8 @@ message(STATUS "  ULAPI Build:    ${ULAPI_BUILD}")
 message(STATUS "  fmt Found:      ${fmt_FOUND}")
 message(STATUS "  gettext Found:  ${Intl_FOUND}")
 message(STATUS "  Threads Found:  ${Threads_FOUND}")
+message(STATUS "  BUILD_GUI:      ${BUILD_GUI}")
+message(STATUS "  Platform:       ${LQTCNC_PLATFORM_STR}")
 message(STATUS "=============================================================")
 message(STATUS "  Module Build Status:")
 message(STATUS "    RTAPI:         ${BUILD_RTAPI}")

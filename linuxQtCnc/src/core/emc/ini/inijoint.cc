@@ -11,7 +11,7 @@
 * Copyright (c) 2004-2009,2026 All rights reserved.
 ********************************************************************/
 
-#include <fmt/format.h>
+#include "fmt_compat.h"
 
 #include "nml_intf/emc.hh"
 #include "libnml/rcs/rcs_print.hh"
