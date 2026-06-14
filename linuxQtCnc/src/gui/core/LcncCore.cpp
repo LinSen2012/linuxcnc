@@ -524,9 +524,9 @@ void LcncCore::sendEstop()
         m_status.spindleState = SpindleState::STOPPED;
         m_status.spindleSpeed = 0.0;
         m_status.interpState = InterpState::IDLE;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendEstop();
+        m_command->estop();
 #endif
     }
     emit commandSent(QStringLiteral("Estop"));
@@ -537,9 +537,9 @@ void LcncCore::sendEstopReset()
 {
     if (m_simulation) {
         m_status.taskState = MachineState::ESTOP_RESET;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendEstopReset();
+        m_command->estopReset();
 #endif
     }
     emit commandSent(QStringLiteral("EstopReset"));
@@ -552,9 +552,9 @@ void LcncCore::sendMachineOn()
         if (m_status.taskState == MachineState::ESTOP_RESET) {
             m_status.taskState = MachineState::ON;
         }
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendMachineOn();
+        m_command->machineOn();
 #endif
     }
     emit commandSent(QStringLiteral("MachineOn"));
@@ -567,9 +567,9 @@ void LcncCore::sendMachineOff()
         m_status.taskState = MachineState::OFF;
         m_status.spindleState = SpindleState::STOPPED;
         m_status.spindleSpeed = 0.0;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendMachineOff();
+        m_command->machineOff();
 #endif
     }
     emit commandSent(QStringLiteral("MachineOff"));
@@ -580,9 +580,9 @@ void LcncCore::sendModeAuto()
 {
     if (m_simulation) {
         m_status.motionMode = MotionMode::AUTO;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendModeAuto();
+        m_command->modeAuto();
 #endif
     }
     emit commandSent(QStringLiteral("ModeAuto"));
@@ -593,9 +593,9 @@ void LcncCore::sendModeManual()
 {
     if (m_simulation) {
         m_status.motionMode = MotionMode::MANUAL;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendModeManual();
+        m_command->modeManual();
 #endif
     }
     emit commandSent(QStringLiteral("ModeManual"));
@@ -606,9 +606,9 @@ void LcncCore::sendModeMDI()
 {
     if (m_simulation) {
         m_status.motionMode = MotionMode::MDI;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendModeMDI();
+        m_command->modeMDI();
 #endif
     }
     emit commandSent(QStringLiteral("ModeMDI"));
@@ -621,9 +621,9 @@ void LcncCore::sendJog(int axis, double velocity)
         if (axis >= 0 && axis < m_status.axes.size()) {
             m_status.axes[axis].velocity = velocity;
         }
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendJog(axis, velocity);
+        m_command->jogCont(axis, velocity);
 #endif
     }
     emit commandSent(QStringLiteral("Jog axis=%1 vel=%2").arg(axis).arg(velocity));
@@ -635,9 +635,9 @@ void LcncCore::sendJogStop(int axis)
         if (axis >= 0 && axis < m_status.axes.size()) {
             m_status.axes[axis].velocity = 0.0;
         }
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendJogStop(axis);
+        m_command->jogStop(axis);
 #endif
     }
     emit commandSent(QStringLiteral("JogStop axis=%1").arg(axis));
@@ -649,9 +649,9 @@ void LcncCore::sendJogCont(int axis, double velocity)
         if (axis >= 0 && axis < m_status.axes.size()) {
             m_status.axes[axis].velocity = velocity;
         }
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendJogCont(axis, velocity);
+        m_command->jogCont(axis, velocity);
 #endif
     }
     emit commandSent(QStringLiteral("JogCont axis=%1 vel=%2").arg(axis).arg(velocity));
@@ -675,9 +675,9 @@ void LcncCore::sendJogIncrement(int axis, double distance, double velocity)
             default: break;
             }
         }
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendJogIncrement(axis, distance, velocity);
+        m_command->jogIncrement(axis, distance, velocity);
 #endif
     }
     emit commandSent(QStringLiteral("JogInc axis=%1 dist=%2 vel=%3")
@@ -693,9 +693,9 @@ void LcncCore::sendMdi(const QString &cmd)
         QTimer::singleShot(500, this, [this]() {
             m_status.interpState = InterpState::IDLE;
         });
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendMdi(cmd);
+        m_command->mdi(cmd);
 #endif
     }
     emit commandSent(QStringLiteral("MDI: %1").arg(cmd));
@@ -709,9 +709,9 @@ void LcncCore::sendProgramOpen(const QString &filename)
         m_status.m_currentLine = 0;
         m_status.programLine = 100;  // 模拟 100 行程序
         m_status.interpState = InterpState::IDLE;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendProgramOpen(filename);
+        m_command->programOpen(filename);
 #endif
     }
     emit commandSent(QStringLiteral("ProgramOpen: %1").arg(filename));
@@ -726,9 +726,9 @@ void LcncCore::sendProgramRun()
             m_status.interpState = InterpState::RUNNING;
             m_status.m_currentLine = 0;
         }
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendProgramRun();
+        m_command->programRun();
 #endif
     }
     emit commandSent(QStringLiteral("ProgramRun"));
@@ -742,9 +742,9 @@ void LcncCore::sendProgramRun(int line)
             m_status.interpState = InterpState::RUNNING;
             m_status.m_currentLine = line;
         }
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendProgramRun(line);
+        m_command->programRun(line);
 #endif
     }
     emit commandSent(QStringLiteral("ProgramRun from line %1").arg(line));
@@ -754,9 +754,9 @@ void LcncCore::sendProgramPause()
 {
     if (m_simulation) {
         m_status.interpState = InterpState::PAUSED;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendProgramPause();
+        m_command->programPause();
 #endif
     }
     emit commandSent(QStringLiteral("ProgramPause"));
@@ -766,9 +766,9 @@ void LcncCore::sendProgramResume()
 {
     if (m_simulation) {
         m_status.interpState = InterpState::RUNNING;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendProgramResume();
+        m_command->programResume();
 #endif
     }
     emit commandSent(QStringLiteral("ProgramResume"));
@@ -779,9 +779,9 @@ void LcncCore::sendProgramStop()
     if (m_simulation) {
         m_status.interpState = InterpState::IDLE;
         m_status.m_currentLine = 0;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendProgramStop();
+        m_command->programStop();
 #endif
     }
     emit commandSent(QStringLiteral("ProgramStop"));
@@ -797,9 +797,9 @@ void LcncCore::sendProgramStep()
                 m_status.interpState = InterpState::PAUSED;
             });
         }
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendProgramStep();
+        m_command->programStep();
 #endif
     }
     emit commandSent(QStringLiteral("ProgramStep"));
@@ -842,9 +842,9 @@ void LcncCore::sendHome(int axis)
                 }
             });
         }
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendHome(axis);
+        m_command->home(axis);
 #endif
     }
     emit commandSent(QStringLiteral("Home axis=%1").arg(axis));
@@ -858,9 +858,9 @@ void LcncCore::sendFeedOverride(double rate)
 {
     if (m_simulation) {
         m_status.feedOverride = std::clamp(rate, 0.0, 2.0);
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendFeedOverride(rate);
+        m_command->feedOverride(rate);
 #endif
     }
     emit commandSent(QStringLiteral("FeedOverride: %1").arg(rate));
@@ -870,9 +870,9 @@ void LcncCore::sendSpindleOverride(double rate)
 {
     if (m_simulation) {
         m_status.spindleOverride = std::clamp(rate, 0.0, 2.0);
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendSpindleOverride(rate);
+        m_command->spindleOverride(rate);
 #endif
     }
     emit commandSent(QStringLiteral("SpindleOverride: %1").arg(rate));
@@ -885,9 +885,9 @@ void LcncCore::sendMaxVelocity(double rate)
         for (auto &axis : m_status.axes) {
             axis.velocity = std::min(axis.velocity, rate);
         }
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendMaxVelocity(rate);
+        m_command->maxVelocity(rate);
 #endif
     }
     emit commandSent(QStringLiteral("MaxVelocity: %1").arg(rate));
@@ -902,9 +902,9 @@ void LcncCore::sendSpindleForward(double speed)
     if (m_simulation) {
         m_status.spindleState = SpindleState::FORWARD;
         m_status.spindleSpeed = speed;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendSpindleForward(speed);
+        m_command->spindleForward(speed);
 #endif
     }
     emit commandSent(QStringLiteral("SpindleForward: %1 RPM").arg(speed));
@@ -915,9 +915,9 @@ void LcncCore::sendSpindleReverse(double speed)
     if (m_simulation) {
         m_status.spindleState = SpindleState::REVERSE;
         m_status.spindleSpeed = -speed;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendSpindleReverse(speed);
+        m_command->spindleReverse(speed);
 #endif
     }
     emit commandSent(QStringLiteral("SpindleReverse: %1 RPM").arg(speed));
@@ -928,9 +928,9 @@ void LcncCore::sendSpindleStop()
     if (m_simulation) {
         m_status.spindleState = SpindleState::STOPPED;
         m_status.spindleSpeed = 0.0;
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendSpindleStop();
+        m_command->spindleStop();
 #endif
     }
     emit commandSent(QStringLiteral("SpindleStop"));
@@ -940,9 +940,9 @@ void LcncCore::sendSpindleFaster()
 {
     if (m_simulation) {
         m_status.spindleOverride = std::min(m_status.spindleOverride + 0.1, 2.0);
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendSpindleFaster();
+        m_command->spindleFaster();
 #endif
     }
     emit commandSent(QStringLiteral("SpindleFaster"));
@@ -952,9 +952,9 @@ void LcncCore::sendSpindleSlower()
 {
     if (m_simulation) {
         m_status.spindleOverride = std::max(m_status.spindleOverride - 0.1, 0.0);
-    } else {
+    } else if (m_command) {
 #ifdef Q_OS_LINUX
-        // TODO: m_command->sendSpindleSlower();
+        m_command->spindleSlower();
 #endif
     }
     emit commandSent(QStringLiteral("SpindleSlower"));
@@ -966,21 +966,49 @@ void LcncCore::sendSpindleSlower()
 
 void LcncCore::sendCoolantMistOn()
 {
+    if (m_simulation) {
+        m_status.coolantMist = true;
+    } else if (m_command) {
+#ifdef Q_OS_LINUX
+        m_command->coolantMistOn();
+#endif
+    }
     emit commandSent(QStringLiteral("CoolantMistOn"));
 }
 
 void LcncCore::sendCoolantMistOff()
 {
+    if (m_simulation) {
+        m_status.coolantMist = false;
+    } else if (m_command) {
+#ifdef Q_OS_LINUX
+        m_command->coolantMistOff();
+#endif
+    }
     emit commandSent(QStringLiteral("CoolantMistOff"));
 }
 
 void LcncCore::sendCoolantFloodOn()
 {
+    if (m_simulation) {
+        m_status.coolantFlood = true;
+    } else if (m_command) {
+#ifdef Q_OS_LINUX
+        m_command->coolantFloodOn();
+#endif
+    }
     emit commandSent(QStringLiteral("CoolantFloodOn"));
 }
 
 void LcncCore::sendCoolantFloodOff()
 {
+    if (m_simulation) {
+        m_status.coolantFlood = false;
+    } else if (m_command) {
+#ifdef Q_OS_LINUX
+        m_command->coolantFloodOff();
+#endif
+    }
     emit commandSent(QStringLiteral("CoolantFloodOff"));
 }
 
