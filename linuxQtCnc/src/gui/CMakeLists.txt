@@ -63,7 +63,42 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     lqt_gui_scope
 )
 
+# -------------------------------------------------------------------
+# Link to linuxQtCnc core C++ libraries (if built by the root CMake):
+# These targets are exported by the root project; they enable the
+# Qt GUI to call into the G-code interpreter, INI parser, HAL, etc.
+# On Windows, only a minimal subset (lqt_rs274 / lqt_ini / lqt_emc_core
+# / lqt_nml / lqt_posemath / lqt_tooldata) is available; on Linux the
+# full RT/HAL/Motion stack is linked as well.
+# -------------------------------------------------------------------
+set(_GUI_CORE_DEPS
+    lqt_rs274 lqt_ini lqt_emc_core lqt_nml lqt_posemath lqt_tooldata
+)
+set(_GUI_LINUX_ONLY_DEPS
+    lqt_hal lqt_task lqt_motion lqt_tp
+)
+foreach(_dep ${_GUI_CORE_DEPS})
+    if(TARGET ${_dep})
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${_dep})
+    endif()
+endforeach()
+if(NOT WIN32)
+    foreach(_dep ${_GUI_LINUX_ONLY_DEPS})
+        if(TARGET ${_dep})
+            target_link_libraries(${PROJECT_NAME} PRIVATE ${_dep})
+        endif()
+    endforeach()
+endif()
+
 if(Qt5SerialPort_FOUND)
     target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::SerialPort)
+endif()
+
+# Linker flags (Linux only)
+if(NOT WIN32)
+    find_library(LIBDL_LIBRARY dl)
+    if(LIBDL_LIBRARY)
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${LIBDL_LIBRARY})
+    endif()
 endif()
 

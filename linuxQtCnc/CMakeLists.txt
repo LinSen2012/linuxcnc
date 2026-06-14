@@ -325,6 +325,110 @@ if(BUILD_HAL)
             LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/hal
         )
     endforeach()
+
+    # ---------- HAL hardware drivers (Linux only; optional) ----------
+    # parport 并口驱动 (PC parallel port)
+    if(NOT LQTCNC_IS_WINDOWS)
+        set(HAL_DRIVER_SOURCES
+            src/core/hal/drivers/hal_parport.c
+            src/core/hal/drivers/hal_ppmc.c
+            src/core/hal/drivers/hal_motenc.c
+            src/core/hal/drivers/hal_ax5214h.c
+            src/core/hal/drivers/hal_skeleton.c
+        )
+        foreach(drv_src ${HAL_DRIVER_SOURCES})
+            if(EXISTS ${CMAKE_SOURCE_DIR}/${drv_src})
+                get_filename_component(drv_name ${drv_src} NAME_WE)
+                add_library(${drv_name} MODULE ${drv_src})
+                lqt_add_common_includes(${drv_name})
+                target_link_libraries(${drv_name} PRIVATE
+                    $<$<TARGET_EXISTS:lqt_rtapi>:lqt_rtapi>
+                    ${CMAKE_DL_LIBS}
+                )
+                set_target_properties(${drv_name} PROPERTIES
+                    PREFIX ""
+                    OUTPUT_NAME ${drv_name}
+                    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/hal
+                )
+            endif()
+        endforeach()
+
+        # ---------- Mesa Hostmot2 驱动 (多文件) ----------
+        file(GLOB MESA_SRC
+            src/core/hal/drivers/mesa-hostmot2/hm2_*.c
+            src/core/hal/drivers/mesa-hostmot2/abs_encoder.c
+            src/core/hal/drivers/mesa-hostmot2/bspi.c
+            src/core/hal/drivers/mesa-hostmot2/dpll.c
+            src/core/hal/drivers/mesa-hostmot2/encoder.c
+            src/core/hal/drivers/mesa-hostmot2/hostmot2.c
+            src/core/hal/drivers/mesa-hostmot2/inm.c
+            src/core/hal/drivers/mesa-hostmot2/inmux.c
+            src/core/hal/drivers/mesa-hostmot2/ioport.c
+            src/core/hal/drivers/mesa-hostmot2/led.c
+            src/core/hal/drivers/mesa-hostmot2/oneshot.c
+            src/core/hal/drivers/mesa-hostmot2/outm.c
+            src/core/hal/drivers/mesa-hostmot2/periodm.c
+            src/core/hal/drivers/mesa-hostmot2/pins.c
+            src/core/hal/drivers/mesa-hostmot2/pktuart.c
+            src/core/hal/drivers/mesa-hostmot2/pwmgen.c
+            src/core/hal/drivers/mesa-hostmot2/raw.c
+            src/core/hal/drivers/mesa-hostmot2/rcpwmgen.c
+            src/core/hal/drivers/mesa-hostmot2/resolver.c
+            src/core/hal/drivers/mesa-hostmot2/setsserial.c
+            src/core/hal/drivers/mesa-hostmot2/spi_common_rpspi.c
+            src/core/hal/drivers/mesa-hostmot2/sserial.c
+            src/core/hal/drivers/mesa-hostmot2/ssr.c
+            src/core/hal/drivers/mesa-hostmot2/stepgen.c
+            src/core/hal/drivers/mesa-hostmot2/tp_pwmgen.c
+            src/core/hal/drivers/mesa-hostmot2/tram.c
+            src/core/hal/drivers/mesa-hostmot2/uart.c
+            src/core/hal/drivers/mesa-hostmot2/watchdog.c
+            src/core/hal/drivers/mesa-hostmot2/xy2mod.c
+        )
+
+        # Each bus (eth / pci / spi / 7i43 / 7i90) becomes a separate .so.
+        # For each bus .c file, we also link the common hostmot2 sources.
+        set(MESA_BUSSES
+            hm2_eth
+            hm2_pci
+            hm2_7i43
+            hm2_7i90
+            hm2_spi
+        )
+
+        # Common (non-bus) sources are shared across all bus modules.
+        set(MESA_COMMON_SOURCES ${MESA_SRC})
+        list(FILTER MESA_COMMON_SOURCES EXCLUDE REGEX ".*hm2_eth\\.c$")
+        list(FILTER MESA_COMMON_SOURCES EXCLUDE REGEX ".*hm2_pci\\.c$")
+        list(FILTER MESA_COMMON_SOURCES EXCLUDE REGEX ".*hm2_7i43\\.c$")
+        list(FILTER MESA_COMMON_SOURCES EXCLUDE REGEX ".*hm2_7i90\\.c$")
+        list(FILTER MESA_COMMON_SOURCES EXCLUDE REGEX ".*hm2_spi\\.c$")
+        list(FILTER MESA_COMMON_SOURCES EXCLUDE REGEX ".*hm2_test\\.c$")
+        list(FILTER MESA_COMMON_SOURCES EXCLUDE REGEX ".*kmod_check\\.c$")
+        list(FILTER MESA_COMMON_SOURCES EXCLUDE REGEX ".*hm2_modbus\\.c$")
+        list(FILTER MESA_COMMON_SOURCES EXCLUDE REGEX ".*spix_.*\\.c$")
+
+        # Build each bus module
+        foreach(bus ${MESA_BUSSES})
+            if(EXISTS ${CMAKE_SOURCE_DIR}/src/core/hal/drivers/mesa-hostmot2/${bus}.c)
+                add_library(${bus} MODULE
+                    src/core/hal/drivers/mesa-hostmot2/${bus}.c
+                    ${MESA_COMMON_SOURCES}
+                )
+                lqt_add_common_includes(${bus})
+                target_link_libraries(${bus} PRIVATE
+                    $<$<TARGET_EXISTS:lqt_rtapi>:lqt_rtapi>
+                    ${CMAKE_DL_LIBS}
+                )
+                set_target_properties(${bus} PROPERTIES
+                    PREFIX ""
+                    OUTPUT_NAME ${bus}
+                    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/hal
+                )
+            endif()
+        endforeach()
+    endif()
+
     message(STATUS "HAL components: ${HAL_COMPONENT_SOURCES}")
 endif()
 
@@ -606,16 +710,26 @@ if(BUILD_KINEMATICS)
 endif()
 
 # ============================================================================
-# Module: Task Controller
+# Module: Task Controller (library) + milltask (executable)
+#
+# The task controller's CANON/C++ core is built as a shared library so the
+# Qt GUI / backend tools can link against it directly. The traditional
+# milltask standalone executable links to lqt_task.
 # ============================================================================
 if(BUILD_TASK)
-    file(GLOB TASK_SOURCES
-        src/core/emc/task/*.cc
+    # ---------- lqt_task (shared library - liblqt_task.so) ----------
+    file(GLOB TASK_LIB_SOURCES
+        src/core/emc/task/taskclass.cc
+        src/core/emc/task/taskintf.cc
+        src/core/emc/task/emctask.cc
+        src/core/emc/task/emccanon.cc
+        src/core/emc/task/backtrace.cc
+        src/core/emc/task/signalhandler.cc
     )
 
-    add_executable(lqt_milltask ${TASK_SOURCES})
-    lqt_add_common_includes(lqt_milltask)
-    target_link_libraries(lqt_milltask PRIVATE
+    add_library(lqt_task SHARED ${TASK_LIB_SOURCES})
+    lqt_add_common_includes(lqt_task)
+    target_link_libraries(lqt_task PRIVATE
         $<$<TARGET_EXISTS:lqt_rs274>:lqt_rs274>
         $<$<TARGET_EXISTS:lqt_emc_core>:lqt_emc_core>
         $<$<TARGET_EXISTS:lqt_nml>:lqt_nml>
@@ -626,7 +740,27 @@ if(BUILD_TASK)
         ${CMAKE_DL_LIBS}
         $<$<NOT:$<BOOL:${LQTCNC_IS_WINDOWS}>>:rt>
     )
-    message(STATUS "task (milltask): ${TASK_SOURCES} files")
+
+    # ---------- lqt_milltask (executable - the main task process) ----------
+    add_executable(lqt_milltask
+        src/core/emc/task/emctaskmain.cc
+        src/core/emc/task/emcsvr.cc
+    )
+    lqt_add_common_includes(lqt_milltask)
+    target_link_libraries(lqt_milltask PRIVATE
+        lqt_task
+        $<$<TARGET_EXISTS:lqt_rs274>:lqt_rs274>
+        $<$<TARGET_EXISTS:lqt_emc_core>:lqt_emc_core>
+        $<$<TARGET_EXISTS:lqt_nml>:lqt_nml>
+        $<$<TARGET_EXISTS:lqt_posemath>:lqt_posemath>
+        $<$<TARGET_EXISTS:lqt_hal>:lqt_hal>
+        $<$<TARGET_EXISTS:lqt_ini>:lqt_ini>
+        $<$<TARGET_EXISTS:lqt_tooldata>:lqt_tooldata>
+        ${CMAKE_DL_LIBS}
+        $<$<NOT:$<BOOL:${LQTCNC_IS_WINDOWS}>>:rt>
+    )
+
+    message(STATUS "task: lqt_task.so (${TASK_LIB_SOURCES}) + lqt_milltask")
 endif()
 
 # ============================================================================

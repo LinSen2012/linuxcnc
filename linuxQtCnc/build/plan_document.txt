@@ -1,0 +1,562 @@
+﻿LinuxCNC Qt/C++
+重构方案
+保留原有逻辑流程 · 继承数据结构和算法 · 迁移至 Qt/C++ 技术栈
+目标工程: linuxQtCnc
+日期: 2026-06-13
+第一章  重构背景与目标
+1.1  现状分析
+LinuxCNC 当前代码库包含 554 个 C/C++ 源文件、150+ 个 Python 文件和 20 个 Tcl 文件，技术栈混用严重：
+技术栈
+文件数
+主要用途
+重构策略
+C/C++
+554
+HAL/RTAPI/NML/Motion/TP/Kins/解释器/任务控制器
+直接继承，清理接口
+Python
+150+
+GUI (AXIS/GScreen/Gmoccapy)、HAL绑定、QtVCP
+分阶改写为 Qt/C++
+Tcl/Tk
+20
+工具 (halshow/tooledit/ngcgui)、tklinuxcnc
+用 Qt/C++ 替代
+GTK
+~30
+halscope/halmeter/classicladder/GScreen
+替换为 Qt 或保留底层
+Boost.Python
+多处
+解释器/Task 的 Python 绑定
+移除，纯 C++ 接口
+1.2  重构目标
+1. 统一技术栈：全部采用 C/C++ + Qt6，消除 Python/Tcl/GTK 依赖
+2. 保留原有逻辑：完整继承 HAL/RTAPI/NML/Motion/TP/Kins 等核心算法
+3. 保留数据结构：全部共享内存结构保持二进制兼容
+4. 现代化 GUI：基于 Qt6 构建统一的现代化用户界面
+5. 跨平台：支持 Linux/Windows 编译和运行
+6. 插件化：运动学、驱动、GUI 组件均可动态加载
+第二章  现有代码语言分布与重构优先级
+2.1  可直接继承的 C/C++ 核心模块
+以下模块均为纯 C/C++ 实现，可直接复制到新工程，仅需清理头文件依赖和接口：
+模块
+源路径
+文件数
+产出
+重构工作量
+RTAPI
+src/rtapi/
+47
+liblinuxcnc-uspace-posix.so
+小
+HAL 核心
+src/hal/
+6
+liblinuxcnchal.so
+小
+HAL 组件
+src/hal/components/
+31
+stepgen/pid/encoder .so
+小
+HAL 驱动
+src/hal/drivers/
+69
+parport/mesa-hostmot2 .so
+中
+HAL 工具
+src/hal/utils/
+27
+halcmd/scope/meter
+中 (GTK→Qt)
+ClassicLadder
+src/hal/classicladder/
+46
+classicladder
+中 (GTK→Qt)
+NML/CMS
+src/libnml/
+97
+libnml.so
+小
+Posemath
+src/libnml/posemath/
+8
+libposemath.so
+小
+NML 接口
+src/emc/nml_intf/
+21
+liblinuxcnc.a
+小
+INI 解析
+src/emc/ini/
+14
+liblinuxcncini.so
+小
+G 代码解释器
+src/emc/rs274ngc/
+51
+librs274.so
+大 (去Python)
+任务控制器
+src/emc/task/
+10
+milltask/linuxcncsvr
+大 (去Python)
+运动控制器
+src/emc/motion/
+25
+motion.o (内核模块)
+小
+轨迹规划器
+src/emc/tp/
+49
+tp.o (内核模块)
+小
+运动学
+src/emc/kinematics/
+36
+trivkins/genserkins .so
+小
+工具数据
+src/emc/tooldata/
+7
+libtooldata.so
+小
+HALUI/后端
+src/emc/usr_intf/*.cc
+9
+halui/emcsh/emcrsh
+小
+2.2  需要重写为 Qt/C++ 的 Python GUI 模块
+模块
+当前技术
+文件数
+重构优先级
+替代方案
+AXIS GUI
+Python/Tk/OpenGL
+12+.py
+高
+Qt6 + QtOpenGL 主界面
+Gscreen
+Python/GTK3
+5.py
+高
+Qt6 触屏界面
+Gmoccapy
+Python/GTK3
+9.py
+高
+Qt6 功能界面
+Touchy
+Python/GTK
+7.py
+中
+Qt6 简洁触屏
+Stepconf
+Python/GTK
+5.py
+中
+Qt6 配置向导
+Pncconf
+Python/GTK
+8.py
+中
+Qt6 Mesa配置向导
+GladeVCP
+Python/GTK
+1.py+库
+中
+Qt Designer插件系统
+PyVCP
+Python/Tk
+2.py+库
+低
+Qt 自定义控件库
+Vismach 3D
+Python/OpenGL/Tk
+16.py
+中
+Qt3D/QOpenGLWidget
+Gremlin
+Python/Qt5/OpenGL
+3.py
+低
+已是Qt，C++化即可
+NGCGUI
+Python/GTK
+1.py
+低
+Qt 子程序界面
+工具数据库
+Python/Tk
+1.py
+低
+Qt 工具管理器
+2.3  需要替代的 Tcl/Tk 工具
+工具
+功能
+替代方案
+halshow.tcl
+HAL 监视器
+Qt HAL Monitor
+tooledit.tcl
+工具表编辑
+Qt Tool Editor
+ngcgui.tcl
+G代码子程序界面
+Qt NGC GUI
+tkbackplot.tcl
+轨迹回放
+Qt GCode Preview
+emccalib.tcl
+校准工具
+Qt Calibration
+emctuning.tcl
+PID调参
+Qt PID Tuner
+pickconfig.tcl
+配置选择器
+Qt Config Picker
+genedit.tcl
+文本编辑器
+Qt GCode Editor
+2.4  可保留适配的模块
+以下模块不涉及 GUI，为纯逻辑层，可保留并适配：
+模块
+说明
+hal.py / pyhal.py
+HAL Python 接口，可保留为可选的脚本扩展接口
+linuxcnc_util.py
+UI 辅助类，其功能将被 Qt 类替代
+rs274/interpret.py
+G代码坐标计算，可合并到 C++ 解释器
+QtVCP 框架 (80+.py)
+已是 Qt 技朠，可逐步 C++ 化
+QtPlasmaC
+已是 Qt 技朠，可直接继承
+启动脚本 (.in)
+Shell 脚本，保留
+HAL 用户组件 (VFD等)
+设备驱动，保留或改写为 C++
+第三章  新工程目录结构
+图 3-1: linuxQtCnc 新工程目录结构
+3.1  目录规划
+linuxQtCnc/
+├── CMakeLists.txt              # 顶层 CMake 配置
+├── cmake/                      # CMake 模块和工具链文件
+│   ├── FindQt6.cmake
+│   └── CompilerFlags.cmake
+├── src/                        # 核心源码
+│   ├── core/              # C/C++ 核心（继承自 LinuxCNC）
+│   │   ├── rtapi/     # RTAPI 实时接口
+│   │   ├── hal/       # HAL 硬件抽象层
+│   │   └── emc/       # EMC 核心控制
+│   │       ├── nml_intf/    # NML 接口
+│   │       ├── rs274ngc/   # G代码解释器
+│   │       ├── task/       # 任务控制器
+│   │       ├── motion/    # 运动控制器
+│   │       ├── tp/        # 轨迹规划器
+│   │       ├── kinematics/# 运动学
+│   │       └── ini/       # INI 解析
+│   ├── gui/               # Qt GUI 层
+│   │   ├── main/       # 主窗口应用
+│   │   ├── widgets/    # 自定义 Qt 控件
+│   │   ├── dialogs/    # 对话框
+│   │   ├── panels/     # VCP 面板
+│   │   └── 3dview/     # Qt3D 可视化
+│   ├── tools/             # 工具程序
+│   │   ├── halcmd/     # HAL 命令行
+│   │   ├── scope/      # 示波器 (Qt)
+│   │   └── config/     # 配置向导
+│   └── plugins/           # 插件系统
+│       ├── kinematics/ # 运动学插件
+│       └── drivers/    # 硬件驱动插件
+├── resources/                  # 资源文件
+├── configs/                    # 配置文件
+└── tests/                      # 测试
+3.2  CMake 构建系统设计
+新工程采用 CMake 构建系统，替代原来的 Autotools。主要库目标：
+库名称
+类型
+来源
+依赖
+lqt_rtapi
+静态库
+src/core/rtapi/
+无
+lqt_hal
+动态库
+src/core/hal/
+lqt_rtapi
+lqt_nml
+动态库
+src/core/emc/nml_intf/ + libnml/
+lqt_hal
+lqt_posemath
+动态库
+src/core/emc/nml_intf/posemath/
+无
+lqt_ini
+动态库
+src/core/emc/ini/
+fmt
+lqt_rs274
+动态库
+src/core/emc/rs274ngc/
+lqt_ini, lqt_nml
+lqt_tooldata
+动态库
+src/core/emc/tooldata/
+无
+lqt_task
+动态库
+src/core/emc/task/
+lqt_rs274, lqt_nml
+lqt_motion
+内核模块
+src/core/emc/motion/ + tp/ + kins/
+lqt_hal
+lqt_gui_core
+动态库
+src/gui/
+Qt6::Widgets, Qt6::OpenGL
+lqt_gui_main
+可执行文件
+src/gui/main/
+lqt_gui_core, lqt_nml
+第四章  分阶段重构计划
+图 4-1: 三阶段重构时间线
+4.1  第一阶段：C/C++ 核心继承（第 1-3 月）
+目标
+将 LinuxCNC 的所有 C/C++ 核心代码复制到 linuxQtCnc，建立 CMake 构建系统，移除 Python/Boost.Python 依赖，确保核心库可编译。
+具体任务
+任务
+详细描述
+产出
+T1.1 初始化工程
+创建 linuxQtCnc 目录结构，配置顶层 CMakeLists.txt
+工程骨架
+T1.2 继承 RTAPI
+复制 src/rtapi/，清理 RTAI/Xenomai 条件编译，保留 POSIX 后端
+liblqt_rtapi.a
+T1.3 继承 HAL 核心
+复制 src/hal/hal_lib.c, hal.h 等，移除 halmodule.cc Python 绑定
+liblqt_hal.so
+T1.4 继承 HAL 组件
+复制 components/，适配 CMake 编译流程
+stepgen/pid/encoder .so
+T1.5 继承 HAL 驱动
+复制 drivers/，包括 mesa-hostmot2
+parport/mesa .so
+T1.6 继承 libnml
+复制 src/libnml/，清理 CMS/NML 传输层
+liblqt_nml.so
+T1.7 继承 posemath
+复制 posemath 库
+liblqt_posemath.so
+T1.8 继承 NML 接口
+复制 nml_intf/，保留 emc_nml.hh 消息定义
+liblqt_emc.a
+T1.9 继承 INI 解析
+复制 ini/，移除 Python 验证脚本依赖
+liblqt_ini.so
+T1.10 继承 motion/tp/kins
+复制运动控制器、轨迹规划器、运动学
+motion.ko + tp.ko
+T1.11 继承 tooldata
+复制工具数据管理
+liblqt_tooldata.so
+T1.12 继承 halcmd
+复制 HAL 命令行工具
+lqt_halcmd
+关键改动点
+移除 Python 依赖：
+rs274ngc 解释器当前通过 Boost.Python 提供 Python 绑定，重构时需移除 interp_python.cc 和 pycall 相关代码，保留纯 C++ 接口。
+移除 Boost.Python 依赖：
+task 控制器 (milltask) 当前链接 libpyplugin.so 和 Python，重构时需将 Python 插件调用替换为 C++ 回调接口。
+数据结构兼容：
+所有共享内存结构（emcmot_command_t, emcmot_status_t, EMC_STAT 等）必须保持与原版二进制兼容，确保配置文件和 HAL 组件可通用。
+4.2  第二阶段：Qt GUI 开发（第 4-8 月）
+目标
+基于 Qt6 构建完整的用户界面，替代所有 Python/Tcl/GTK GUI。
+具体任务
+任务
+详细描述
+对应替代
+T2.1 Qt 核心库
+封装 NML 通信、HAL 接口为 Qt 对象
+linuxcnc_util.py
+T2.2 主界面
+构建主窗口，包含 DRO、GCode预览、手轮、状态栏
+AXIS GUI
+T2.3 DRO 控件
+Qt DRO 自定义控件，支持多轴显示
+AXIS DRO
+T2.4 GCode 编辑器
+语法高亮、行号、MDI 输入
+AXIS 编辑器
+T2.5 GCode 3D 预览
+QtOpenGL 删具路径渲染，支持旋转/缩放
+AXIS gremlin
+T2.6 触屏界面
+大按钮触屏优化布局
+Gscreen/Touchy
+T2.7 HAL 监视器
+实时监视 HAL pin/signal/param
+halshow.tcl
+T2.8 示波器
+Qt 多通道信号示波器
+halscope (GTK)
+T2.9 VCP 框架
+Qt Designer 插件系统，支持自定义面板
+GladeVCP/PyVCP
+T2.10 配置向导
+Stepconf/Pncconf 的 Qt 版本
+stepconf/pncconf
+T2.11 工具管理
+工具表编辑器
+tooledit.tcl
+T2.12 启动器
+配置选择 + 环境检测 + 启动流程
+linuxcnc.in + pickconfig
+Qt GUI 架构设计
+建议采用以下 Qt 架构模式：
+class LcncApplication : public QApplication
+  └─ LcncCore (NML 通信层)
+      ├─ CommandChannel (发送命令)
+      ├─ StatusChannel  (读取状态)
+      └─ ErrorChannel   (读取错误)
+  └─ MainWindow (主窗口)
+      ├─ DROWidget      (数字读数)
+      ├─ GCodePreview  (QtOpenGL 3D视图)
+      ├─ GCodeEditor   (代码编辑)
+      ├─ MDIWidget      (MDI 输入)
+      ├─ JogWidget      (手轮/点动)
+      ├─ OverridePanel  (覆盖控制)
+      └─ StatusBar      (状态栏)
+4.3  第三阶段：高级功能（第 9-12 月）
+目标
+实现高级可视化、插件系统、特殊功能模块。
+具体任务
+任务
+详细描述
+对应替代
+T3.1 Qt3D 机器可视化
+替代 vismach，实时 3D 机床模型显示
+vismach (15.py)
+T3.2 轨迹回放
+完整的 G 代码轨迹回放和模拟
+tkbackplot.tcl
+T3.3 校准/调参工具
+自动 PID 调参、轴校准向导
+emccalib/emctuning
+T3.4 QtPlasmaC
+等离子切割专用界面
+qtplasmac (Python)
+T3.5 插件系统
+运动学/驱动动态加载框架
+无（新增）
+T3.6 远程监控
+Web/Qt Remote 远程监控界面
+无（新增）
+T3.7 多语言 i18n
+Qt 国际化支持
+po 翻译文件
+T3.8 单元测试完善
+全面的单元测试和集成测试
+tests/
+第五章  关键接口迁移策略
+5.1  NML 通信接口迁移
+原来的 NML 通信在 Python 端通过 linuxcnc_util.py 封装。重构时将其迁移为 Qt C++ 类：
+// 原 Python 接口:
+s = linuxcnc.stat()   # 读取状态
+c = linuxcnc.command() # 发送命令
+e = linuxcnc.error()  # 读取错误
+// 新 Qt/C++ 接口:
+class LcncStat : public NmlReader {
+  EMC_STAT* stat();
+  void poll();  // 定时更新
+};
+class LcncCommand : public NmlWriter {
+  void mode(LinuxcncMode);
+  void home(int axis);
+  void jog(int axis, double velocity);
+  void mdi(const QString&amp; command);
+};
+5.2  HAL 接口迁移
+原来的 Python HAL 接口 (hal.py) 迁移为 C++ RAII 封装：
+// 原 Python 接口:
+h = hal.component(&quot;mycomp&quot;)
+h.newpin(&quot;out&quot;, hal.HAL_FLOAT, hal.HAL_OUT)
+h.ready()
+// 新 C++ 接口:
+class HalComponent {
+  HalComponent(const char* name);
+  ~HalComponent(); // 自动 hal_exit
+  HalPinFloat newPin(const char* name, HalDir dir);
+  HalSignal link(const char* pin, const char* sig);
+  void ready();
+};
+5.3  Canon 命令接口迁移
+canon.hh 定义的规范命令接口已是 C++ 接口，无需修改。但需注意：
+1. 原来的 GET_EXTERNAL_* 查询函数通过全局函数指针实现，重构时建议改为虚函数接口，便于测试
+2. emccanon.cc 中的 canon 命令实现需保留，它是解释器到运动控制的桥梁
+3. 移除 Python 相关的 pycall 和 interp_python 代码，用 C++ 回调替代
+5.4  共享内存兼容性
+为确保新旧系统可以共存，共享内存结构必须严格兼容：
+结构体
+用途
+兼容要求
+emcmot_command_t
+task-&gt;motion 命令通道
+字段偏移和大小必须一致
+emcmot_status_t
+motion-&gt;task 状态通道
+字段偏移和大小必须一致
+emcmot_config_t
+运动配置数据
+字段偏移和大小必须一致
+EMC_STAT
+NML 状态聚合
+NML 消息 ID 和编码必须一致
+HAL 共享内存
+HAL 引脚/信号/参数
+布局和命名规则必须一致
+第六章  风险与应对策略
+风险
+严重程度
+应对策略
+G代码解释器 Python 依赖深度嵌入
+高
+分析 pycall 调用点，提取纯逻辑，C++ 重写回调接口
+NML 通信协议复杂度
+中
+直接继承 NML 库，不改协议本身
+共享内存布局兼容
+高
+严格复制原始结构体，使用 static_assert 检查大小
+ClassicLadder GTK 依赖
+中
+将 GTK UI 层抽离，用 Qt Widget 替换
+配置文件格式兼容
+中
+.ini/.hal/.tbl 格式不变，解析器完全兼容
+实时性能
+高
+保留原有实时线程架构，仅替换 GUI 层
+工作量巨大
+高
+分阶段实施，每阶段可独立验证
+第七章  重构后架构总览
+图 7-1: 重构后系统架构图
+重构完成后，linuxQtCnc 将是一个纯 C/C++ + Qt6 的现代化数控系统，具备以下特点：
+1. 统一技朠栈：全部代码为 C/C++ + Qt6，无 Python/Tcl/GTK 依赖
+2. 保留原有算法：HAL/RTAPI/NML/Motion/TP/Kins 等核心算法完整继承
+3. 配置兼容：原有 .ini/.hal/.tbl 配置文件可直接使用
+4. 现代化 GUI：基于 Qt6 的统一界面，支持触屏和桌面
+5. 插件化架构：运动学、驱动、GUI 控件均可动态加载
+6. 跨平台：支持 Linux 和 Windows 编译
