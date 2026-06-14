@@ -16,8 +16,44 @@
 #include <QPlainTextEdit>
 #include <QWidget>
 #include <QLineEdit>
+#include <QSyntaxHighlighter>
+#include <QTextCharFormat>
 
 class GCodeLineNumberArea;
+
+// ============================================================================
+// G/M/T 代码语法高亮器
+// ============================================================================
+
+/**
+ * @brief GCodeHighlighter - G 代码语法高亮器
+ *
+ * 基于 QSyntaxHighlighter 的 G 代码语法高亮实现，支持：
+ * - G 代码（蓝色粗体）
+ * - M 代码（洋红色粗体）
+ * - T 代码（橙色粗体）
+ * - S/F/P 等参数字（绿色）
+ * - X/Y/Z/A/B/C/U/V/W 轴字（青色）
+ * - 圆括号注释 ; 注释 （灰色斜体）
+ * - 数值常量（黄色）
+ */
+class GCodeHighlighter : public QSyntaxHighlighter
+{
+    Q_OBJECT
+
+public:
+    explicit GCodeHighlighter(QTextDocument *parent = nullptr);
+
+protected:
+    void highlightBlock(const QString &text) override;
+
+private:
+    struct HighlightingRule {
+        QRegularExpression pattern;
+        QTextCharFormat format;
+    };
+    QVector<HighlightingRule> m_rules;
+};
 
 /**
  * @brief GCodeEditor - G 代码编辑器组件
@@ -145,6 +181,7 @@ private:
 
     GCodeLineNumberArea *m_lineNumberArea = nullptr; ///< 行号区域
     QLineEdit *m_mdiInput = nullptr;                  ///< MDI 命令输入框
+    GCodeHighlighter *m_highlighter = nullptr;       ///< 语法高亮器
     QString m_currentFile;                             ///< 当前文件路径
     int m_highlightedLine = -1;                        ///< 高亮行号
 };

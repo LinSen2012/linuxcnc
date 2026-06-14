@@ -105,7 +105,7 @@ bool LcncCommand::machineOn()
         return false;
     }
     EMC_TASK_SET_STATE emc_cmd;
-    emc_cmd.state = EMC_TASK_STATE_ON;
+    emc_cmd.state = EMC_TASK_STATE::ON;
     int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
     if (result != 0) {
         emit commandError(QStringLiteral("MACHINE_ON"), QString("NML 写入失败: %1").arg(result));
@@ -126,7 +126,7 @@ bool LcncCommand::machineOff()
         return false;
     }
     EMC_TASK_SET_STATE emc_cmd;
-    emc_cmd.state = EMC_TASK_STATE_OFF;
+    emc_cmd.state = EMC_TASK_STATE::OFF;
     int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
     if (result != 0) {
         emit commandError(QStringLiteral("MACHINE_OFF"), QString("NML 写入失败: %1").arg(result));
@@ -151,7 +151,7 @@ bool LcncCommand::modeManual()
         return false;
     }
     EMC_TASK_SET_MODE emc_cmd;
-    emc_cmd.mode = EMC_TASK_MODE_MANUAL;
+    emc_cmd.mode = EMC_TASK_MODE::MANUAL;
     int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
     if (result != 0) {
         emit commandError(QStringLiteral("MODE_MANUAL"), QString("NML 写入失败: %1").arg(result));
@@ -172,7 +172,7 @@ bool LcncCommand::modeAuto()
         return false;
     }
     EMC_TASK_SET_MODE emc_cmd;
-    emc_cmd.mode = EMC_TASK_MODE_AUTO;
+    emc_cmd.mode = EMC_TASK_MODE::AUTO;
     int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
     if (result != 0) {
         emit commandError(QStringLiteral("MODE_AUTO"), QString("NML 写入失败: %1").arg(result));
@@ -217,9 +217,10 @@ bool LcncCommand::jogCont(int axis, double velocity)
         emit commandError(QStringLiteral("JOG_CONT"), "NML 命令通道未初始化");
         return false;
     }
-    EMC_TRAJ_JOG_CONT emc_cmd;
-    emc_cmd.axis = axis;
+    EMC_JOG_CONT emc_cmd;
+    emc_cmd.joint_or_axis = axis;
     emc_cmd.vel = velocity;
+    emc_cmd.jjogmode = 0;  // axis jog mode (使用轴编号)
     int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
     if (result != 0) {
         emit commandError(QStringLiteral("JOG_CONT"), QString("NML 写入失败: %1").arg(result));
@@ -261,10 +262,11 @@ bool LcncCommand::jogIncrement(int axis, double distance, double velocity)
         emit commandError(QStringLiteral("JOG_INCR"), "NML 命令通道未初始化");
         return false;
     }
-    EMC_TRAJ_JOG_INCR emc_cmd;
-    emc_cmd.axis = axis;
+    EMC_JOG_INCR emc_cmd;
+    emc_cmd.joint_or_axis = axis;
     emc_cmd.vel = velocity;
     emc_cmd.incr = distance;
+    emc_cmd.jjogmode = 0;  // axis jog mode (使用轴编号)
     int result = static_cast<RCS_CMD_CHANNEL *>(m_nmlCmd)->write(emc_cmd);
     if (result != 0) {
         emit commandError(QStringLiteral("JOG_INCR"), QString("NML 写入失败: %1").arg(result));
@@ -289,7 +291,7 @@ bool LcncCommand::programOpen(const QString &filename)
         emit commandError(QStringLiteral("PROGRAM_OPEN"), "NML 命令通道未初始化");
         return false;
     }
-    EMC_TASK_OPEN_PROGRAM emc_cmd;
+    EMC_TASK_PLAN_OPEN emc_cmd;
     // 复制文件名到命令结构
     strncpy(emc_cmd.file, filename.toLocal8Bit().constData(), sizeof(emc_cmd.file) - 1);
     emc_cmd.file[sizeof(emc_cmd.file) - 1] = '\0';

@@ -23,6 +23,164 @@
 #include <QKeyEvent>
 #include <QAction>
 #include <QMenu>
+#include <QRegularExpression>
+#include <QTextDocument>
+
+// ============================================================================
+// GCodeHighlighter 完整实现
+// ============================================================================
+
+GCodeHighlighter::GCodeHighlighter(QTextDocument *parent)
+    : QSyntaxHighlighter(parent)
+{
+    HighlightingRule rule;
+
+    // --- G 代码 (蓝色粗体) ---
+    QTextCharFormat gcodeFormat;
+    gcodeFormat.setForeground(QColor(0x66, 0xa0, 0xff));
+    gcodeFormat.setFontWeight(QFont::Bold);
+    rule.pattern = QRegularExpression(QStringLiteral("\\bG\\d+\\.?\\d*"),
+                                       QRegularExpression::CaseInsensitiveOption);
+    rule.format = gcodeFormat;
+    m_rules.append(rule);
+
+    // --- M 代码 (洋红色粗体) ---
+    QTextCharFormat mcodeFormat;
+    mcodeFormat.setForeground(QColor(0xff, 0x70, 0xff));
+    mcodeFormat.setFontWeight(QFont::Bold);
+    rule.pattern = QRegularExpression(QStringLiteral("\\bM\\d+\\.?\\d*"),
+                                       QRegularExpression::CaseInsensitiveOption);
+    rule.format = mcodeFormat;
+    m_rules.append(rule);
+
+    // --- T 代码 (橙色粗体) ---
+    QTextCharFormat tcodeFormat;
+    tcodeFormat.setForeground(QColor(0xff, 0xaa, 0x33));
+    tcodeFormat.setFontWeight(QFont::Bold);
+    rule.pattern = QRegularExpression(QStringLiteral("\\bT\\d+\\.?\\d*"),
+                                       QRegularExpression::CaseInsensitiveOption);
+    rule.format = tcodeFormat;
+    m_rules.append(rule);
+
+    // --- S/F/P/H/D/R/Q 等参数 (绿色) ---
+    QTextCharFormat paramFormat;
+    paramFormat.setForeground(QColor(0x7c, 0xfc, 0x00));
+    QStringList paramPrefixes;
+    paramPrefixes << QStringLiteral("\\bS") << QStringLiteral("\\bF")
+                  << QStringLiteral("\\bP") << QStringLiteral("\\bH")
+                  << QStringLiteral("\\bD") << QStringLiteral("\\bR")
+                  << QStringLiteral("\\bQ") << QStringLiteral("\\bE")
+                  << QStringLiteral("\\bK");
+    for (const QString &prefix : qAsConst(paramPrefixes)) {
+        rule.pattern = QRegularExpression(
+            prefix + QStringLiteral("[-+]?\\d*\\.?\\d+"),
+            QRegularExpression::CaseInsensitiveOption
+        );
+        rule.format = paramFormat;
+        m_rules.append(rule);
+    }
+
+    // --- X/Y/Z/A/B/C/U/V/W 轴字 (青色) ---
+    QTextCharFormat axisFormat;
+    axisFormat.setForeground(QColor(0x40, 0xe0, 0xd0));
+    QStringList axisPrefixes;
+    axisPrefixes << QStringLiteral("\\bX") << QStringLiteral("\\bY")
+                 << QStringLiteral("\\bZ") << QStringLiteral("\\bA")
+                 << QStringLiteral("\\bB") << QStringLiteral("\\bC")
+                 << QStringLiteral("\\bU") << QStringLiteral("\\bV")
+                 << QStringLiteral("\\bW");
+    for (const QString &prefix : qAsConst(axisPrefixes)) {
+        rule.pattern = QRegularExpression(
+            prefix + QStringLiteral("[-+]?\\d*\\.?\\d+"),
+            QRegularExpression::CaseInsensitiveOption
+        );
+        rule.format = axisFormat;
+        m_rules.append(rule);
+    }
+
+    // --- I/J/K 圆弧参数 (紫色) ---
+    QTextCharFormat arcFormat;
+    arcFormat.setForeground(QColor(0xb0, 0x80, 0xff));
+    QStringList arcPrefixes;
+    arcPrefixes << QStringLiteral("\\bI") << QStringLiteral("\\bJ")
+                << QStringLiteral("\\bK");
+    for (const QString &prefix : qAsConst(arcPrefixes)) {
+        rule.pattern = QRegularExpression(
+            prefix + QStringLiteral("[-+]?\\d*\\.?\\d+"),
+            QRegularExpression::CaseInsensitiveOption
+        );
+        rule.format = arcFormat;
+        m_rules.append(rule);
+    }
+
+    // --- 数字常量 (黄色，非轴字/参数字的数字) ---
+    QTextCharFormat numberFormat;
+    numberFormat.setForeground(QColor(0xff, 0xff, 0x99));
+    rule.pattern = QRegularExpression(QStringLiteral("\\b\\d+\\.?\\d*\\b"));
+    rule.format = numberFormat;
+    m_rules.append(rule);
+
+    // --- 分号注释 (灰色斜体) ---
+    QTextCharFormat semicolonCommentFormat;
+    semicolonCommentFormat.setForeground(QColor(0x80, 0x80, 0x80));
+    semicolonCommentFormat.setFontItalic(true);
+    rule.pattern = QRegularExpression(QStringLiteral(";[^\n]*"));
+    rule.format = semicolonCommentFormat;
+    m_rules.append(rule);
+
+    // --- 圆括号注释 (灰色斜体) ---
+    // 多行注释：( ... ) 可能跨越多行，这里在 highlightBlock 中特殊处理
+}
+
+void GCodeHighlighter::highlightBlock(const QString &text)
+{
+    const int ParenCommentState = 1;  // 自定义状态
+
+    // ---- 多行圆括号注释处理 ----
+    int startIndex = 0;
+    int state = previousBlockState();
+
+    if (state != ParenCommentState) {
+        // 当前块未在括号注释内，查找第一个 '('
+        startIndex = text.indexOf(QLatin1Char('('));
+    }
+
+    while (startIndex >= 0) {
+        // 查找匹配的 ')'
+        int endIndex = text.indexOf(QLatin1Char(')'), startIndex);
+        int commentLength;
+        if (endIndex == -1) {
+            // 本行未闭合，延续到下一行
+            setCurrentBlockState(ParenCommentState);
+            commentLength = text.length() - startIndex;
+        } else {
+            commentLength = endIndex - startIndex + 1;
+        }
+
+        QTextCharFormat commentFormat;
+        commentFormat.setForeground(QColor(0x80, 0x80, 0x80));
+        commentFormat.setFontItalic(true);
+        setFormat(startIndex, commentLength, commentFormat);
+
+        // 查找下一个 '('
+        startIndex = text.indexOf(QLatin1Char('('), startIndex + commentLength);
+    }
+
+    // ---- 单行规则匹配（不覆盖已有括号注释）----
+    for (const HighlightingRule &rule : m_rules) {
+        QRegularExpressionMatchIterator it = rule.pattern.globalMatch(text);
+        while (it.hasNext()) {
+            QRegularExpressionMatch match = it.next();
+            int pos = match.capturedStart();
+            int len = match.capturedLength();
+            // 跳过已被括号注释标记的文本
+            if (format(pos) != QTextCharFormat()) {
+                continue;
+            }
+            setFormat(pos, len, rule.format);
+        }
+    }
+}
 
 // ============================================================================
 // GCodeLineNumberArea 完整实现
@@ -59,6 +217,7 @@ GCodeEditor::GCodeEditor(QWidget *parent)
     : QPlainTextEdit(parent)
     , m_lineNumberArea(new GCodeLineNumberArea(this))
     , m_mdiInput(new QLineEdit(this))
+    , m_highlighter(new GCodeHighlighter(document()))
     , m_currentFile()
     , m_highlightedLine(-1)
 {

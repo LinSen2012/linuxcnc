@@ -68,7 +68,7 @@ LcncCore::~LcncCore()
 // 连接管理
 // ============================================================================
 
-void LcncCore::connectToServer(const QString &iniFile)
+bool LcncCore::connectToServer(const QString &iniFile)
 {
     if (m_connected) {
         qWarning().noquote() << "[LcncCore] 已经连接，先断开再重连";
@@ -81,18 +81,15 @@ void LcncCore::connectToServer(const QString &iniFile)
     // ============================================================
     // Linux: 真实 NML 连接
     // ============================================================
-    // 步骤 1: 解析 INI 文件获取 NML 配置
     INIFILE ini;
     if (ini.Open(iniFile.toLocal8Bit().constData()) != 0) {
         QString err = QString("无法打开 INI 文件: %1").arg(iniFile);
         qCritical().noquote() << "[LcncCore]" << err;
         emit errorOccurred(err);
-        // 回退到模拟模式
         startSimulation();
-        return;
+        return true;  // 模拟模式也算成功连接
     }
 
-    // 步骤 2: 读取 NML 配置文件路径（默认从 INI 查找 [EMC] NML_FILE）
     QString nmlFile;
     const char *nmlSection = "EMC";
     char buf[LINELEN];
@@ -101,74 +98,46 @@ void LcncCore::connectToServer(const QString &iniFile)
         qInfo() << "[LcncCore] NML 文件:" << nmlFile;
     } else {
         nmlFile = "/etc/linuxcnc/linuxcnc.nml";
-        qInfo() << "[LcncCore] 使用默认 NML 文件:" << nmlFile;
     }
 
-    // 步骤 3: 创建 NML 命令通道
-    // 默认 emcChannelType = "xemc"
     const char *channelType = "xemc";
     if (ini.Find(nmlSection, "CHANNEL", 1)) {
         iniString(buf, sizeof(buf));
         channelType = buf;
     }
 
-    // 步骤 4: 创建 NML 通道
-    // NML channel naming: emcFormat, emcChannelType, "xemc_cmd"
     m_nmlCmd = new RCS_CMD_CHANNEL(
-        nmlFile.toLocal8Bit().constData(),
-        emcFormat,
-        channelType,
-        "xemc_cmd"
-    );
-
+        nmlFile.toLocal8Bit().constData(), emcFormat, channelType, "xemc_cmd");
     m_nmlStat = new RCS_STAT_CHANNEL(
-        nmlFile.toLocal8Bit().constData(),
-        emcFormat,
-        channelType,
-        "xemc_stat"
-    );
+        nmlFile.toLocal8Bit().constData(), emcFormat, channelType, "xemc_stat");
 
-    // 步骤 5: 验证通道创建成功
     if (!m_nmlCmd || !m_nmlStat) {
-        QString err = QString("NML 通道创建失败 (cmd=%1, stat=%2)")
-                          .arg(m_nmlCmd != nullptr).arg(m_nmlStat != nullptr);
+        QString err = "NML 通道创建失败";
         qCritical().noquote() << "[LcncCore]" << err;
         emit errorOccurred(err);
-        // 回退到模拟模式
         startSimulation();
-        return;
+        return true;
     }
 
     if (m_nmlCmd->error_type != 0 || m_nmlStat->error_type != 0) {
-        QString err = QString("NML 通道错误 (cmd_err=%1, stat_err=%2)")
-                          .arg(m_nmlCmd->error_type)
-                          .arg(m_nmlStat->error_type);
+        QString err = QString("NML 通道错误");
         qCritical().noquote() << "[LcncCore]" << err;
         emit errorOccurred(err);
-        // 回退到模拟模式
         startSimulation();
-        return;
+        return true;
     }
 
-    // 步骤 6: 初始化 EMC_STAT 状态缓冲区
     m_emcStat = new EMC_STAT;
-
-    // 步骤 7: 读取初始状态
     NMLmsg *msg = m_nmlStat->peek();
     if (msg && msg->type == EMC_STAT_TYPE) {
         *m_emcStat = *(static_cast<EMC_STAT *>(msg));
-        qInfo() << "[LcncCore] 初始 EMC 状态读取成功";
     }
 
-    // 步骤 8: 初始化 LcncCommand 的 NML 通道
     m_command->setNmlChannel(m_nmlCmd);
-
-    // 步骤 9: 标记已连接并启动轮询
     m_connected = true;
     m_simulation = false;
     m_status.connected = true;
 
-    // 轮询周期从 INI 读取，默认 50ms
     int pollMs = 50;
     if (ini.Find("DISPLAY", "CYCLE_TIME", 1)) {
         pollMs = static_cast<int>(iniFindDouble("CYCLE_TIME") * 1000.0);
@@ -180,13 +149,14 @@ void LcncCore::connectToServer(const QString &iniFile)
     emit connected();
     qInfo().noquote() << "[LcncCore] Linux NML 连接成功，轮询周期"
                       << pollMs << "ms";
+    return true;
 
 #else
     // Windows 开发环境 - 使用模拟模式
     qInfo().noquote() << "[LcncCore] Windows 环境，使用模拟数据";
     qInfo().noquote() << "[LcncCore] INI 文件（模拟）:" << iniFile;
     startSimulation();
-
+    return true;
 #endif
 }
 
@@ -1018,12 +988,125 @@ void LcncCore::sendCoolantFloodOff()
 // 状态查询
 // ============================================================================
 
-const LcncStatusData &LcncCore::statusData() const
+const LcncStatusData *LcncCore::statusData() const
 {
-    return m_status;
+    return &m_status;
 }
 
 LcncCommand *LcncCore::command() const
 {
     return m_command;
+}
+
+// ============================================================================
+// 模式切换
+// ============================================================================
+
+void LcncCore::setMode(Mode mode)
+{
+    m_mode = mode;
+    switch (mode) {
+    case Mode::ModeAuto:   sendModeAuto();   break;
+    case Mode::ModeManual: sendModeManual(); break;
+    case Mode::ModeMdi:    sendModeMDI();    break;
+    }
+}
+
+LcncCore::Mode LcncCore::mode() const
+{
+    return m_mode;
+}
+
+// ============================================================================
+// 高层命令（MainWindow 直接调用）
+// ============================================================================
+
+bool LcncCore::estop()
+{
+    sendEstop();
+    return true;
+}
+
+bool LcncCore::estopReset()
+{
+    sendEstopReset();
+    return true;
+}
+
+bool LcncCore::machineOn()
+{
+    sendMachineOn();
+    return true;
+}
+
+bool LcncCore::machineOff()
+{
+    sendMachineOff();
+    return true;
+}
+
+bool LcncCore::homeAxis(int axis)
+{
+    sendHome(axis);
+    return true;
+}
+
+bool LcncCore::runProgram(const QString &program)
+{
+    if (!m_simulation && m_command) {
+#ifdef Q_OS_LINUX
+        // Linux: 实际打开程序并运行
+        // program 是 G 代码字符串，需要写入临时文件或直接传递
+        Q_UNUSED(program);
+        // TODO: 实现真实 NML 程序运行流程
+        return false;
+#endif
+    }
+
+    // 模拟模式
+    if (!program.isEmpty()) {
+        m_status.m_currentFile = QStringLiteral("memory_program");
+        m_status.m_currentLine = 0;
+        m_status.interpState = InterpState::RUNNING;
+        m_status.motionMode = MotionMode::AUTO;
+        emit statusUpdated(m_status);
+        emit commandSent(QStringLiteral("ProgramRun"));
+        return true;
+    }
+    return false;
+}
+
+void LcncCore::pauseProgram()
+{
+    if (m_simulation) {
+        if (m_status.interpState == InterpState::RUNNING) {
+            m_status.interpState = InterpState::PAUSED;
+            emit statusUpdated(m_status);
+        }
+    } else {
+        sendProgramPause();
+    }
+}
+
+void LcncCore::stopProgram()
+{
+    if (m_simulation) {
+        m_status.interpState = InterpState::IDLE;
+        m_status.m_currentLine = 0;
+        emit statusUpdated(m_status);
+    } else {
+        sendProgramStop();
+    }
+}
+
+void LcncCore::resumeProgram()
+{
+    if (m_simulation) {
+        if (m_status.interpState == InterpState::PAUSED) {
+            m_status.interpState = InterpState::RUNNING;
+            emit statusUpdated(m_status);
+        }
+    } else {
+        sendProgramResume();
+    }
 }

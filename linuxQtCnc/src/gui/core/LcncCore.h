@@ -35,6 +35,16 @@ class LcncCore : public QObject
 
 public:
     /**
+     * @brief 运行模式枚举
+     */
+    enum Mode {
+        ModeAuto,    ///< 自动模式
+        ModeManual,  ///< 手动模式
+        ModeMdi      ///< MDI 模式
+    };
+    Q_ENUM(Mode)
+
+    /**
      * @brief 获取 LcncCore 单例实例
      * @return 单例指针
      */
@@ -58,11 +68,12 @@ public:
     /**
      * @brief 连接到 NML 服务器
      * @param iniFile INI 配置文件路径
+     * @return true 连接成功
      *
      * 在 Linux 上：读取 INI 文件，初始化 NML 通道
      * 在 Windows 上：进入模拟模式
      */
-    void connectToServer(const QString &iniFile);
+    bool connectToServer(const QString &iniFile);
 
     /**
      * @brief 断开与 NML 服务器的连接
@@ -85,6 +96,79 @@ public:
      * @brief 启动模拟模式（不连接真实服务器）
      */
     void startSimulation();
+
+    // ========================================================================
+    // 模式切换
+    // ========================================================================
+
+    /**
+     * @brief 设置运行模式
+     * @param mode 目标模式（Auto/Manual/MDI）
+     */
+    void setMode(Mode mode);
+
+    /**
+     * @brief 获取当前运行模式
+     * @return 当前模式
+     */
+    Mode mode() const;
+
+    // ========================================================================
+    // 高层命令（MainWindow 直接调用）
+    // ========================================================================
+
+    /**
+     * @brief 发送急停命令
+     * @return true 命令已发送
+     */
+    bool estop();
+
+    /**
+     * @brief 发送急停复位命令
+     * @return true 命令已发送
+     */
+    bool estopReset();
+
+    /**
+     * @brief 开启机床
+     * @return true 命令已发送
+     */
+    bool machineOn();
+
+    /**
+     * @brief 关闭机床
+     * @return true 命令已发送
+     */
+    bool machineOff();
+
+    /**
+     * @brief 单轴回参考点
+     * @param axis 轴编号
+     * @return true 命令已发送
+     */
+    bool homeAxis(int axis);
+
+    /**
+     * @brief 运行 G 代码程序
+     * @param program G 代码内容
+     * @return true 命令已发送
+     */
+    bool runProgram(const QString &program);
+
+    /**
+     * @brief 暂停程序
+     */
+    void pauseProgram();
+
+    /**
+     * @brief 停止程序
+     */
+    void stopProgram();
+
+    /**
+     * @brief 恢复程序
+     */
+    void resumeProgram();
 
     // ========================================================================
     // 机床控制命令
@@ -284,10 +368,10 @@ public:
     // ========================================================================
 
     /**
-     * @brief 获取最新的状态数据
-     * @return 状态数据的常量引用
+     * @brief 获取最新的状态数据（指针版本，供 MainWindow 使用）
+     * @return 状态数据的常量指针
      */
-    const LcncStatusData &statusData() const;
+    const LcncStatusData *statusData() const;
 
     /**
      * @brief 获取命令发送接口
@@ -370,6 +454,7 @@ private:
 
     bool m_connected = false;       ///< 连接标志
     bool m_simulation = false;     ///< 模拟模式标志
+    Mode m_mode = Mode::ModeManual; ///< 当前运行模式
     QString m_iniFile;             ///< INI 文件路径
 
     // 模拟数据计数器
