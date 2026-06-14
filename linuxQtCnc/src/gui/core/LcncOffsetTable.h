@@ -57,6 +57,9 @@ struct G92Offset {
     double a = 0.0;
     double b = 0.0;
     double c = 0.0;
+    double u = 0.0;
+    double v = 0.0;
+    double w = 0.0;
     bool active = false;    ///< G92 是否激活
 };
 
