@@ -195,6 +195,13 @@ private:
      */
     QString formatLine(const ToolItem &tool) const;
 
+    /**
+     * @brief 将刀具添加到索引映射
+     * @param tool 刀具数据
+     * @return 是否成功
+     */
+    bool addToolToIndex(const ToolItem &tool);
+
     static LcncToolTable *m_instance;
 
     QVector<ToolItem> m_tools;

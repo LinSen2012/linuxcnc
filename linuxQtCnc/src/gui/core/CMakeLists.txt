@@ -4,6 +4,7 @@ add_library(lqt_gui_core STATIC
     LcncCommand.h LcncCommand.cpp
     LcncHalMonitor.h LcncHalMonitor.cpp
     LcncToolTable.h LcncToolTable.cpp
+    LcncOffsetTable.h LcncOffsetTable.cpp
 )
 target_include_directories(lqt_gui_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}

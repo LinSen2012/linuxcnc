@@ -371,17 +371,17 @@ void LcncCore::mapEmcStatToLcnc(const void *raw)
     }
 
     // XYZ 位置快捷访问（从 EmcPose 的 tran 成员访问）
-    m_status.absolutePos.x = s->motion.traj.position.tran.x;
-    m_status.absolutePos.y = s->motion.traj.position.tran.y;
-    m_status.absolutePos.z = s->motion.traj.position.tran.z;
+    m_status.absolutePos.tran.x = s->motion.traj.position.tran.x;
+    m_status.absolutePos.tran.y = s->motion.traj.position.tran.y;
+    m_status.absolutePos.tran.z = s->motion.traj.position.tran.z;
     m_status.absolutePos.a = s->motion.traj.position.a;
     m_status.absolutePos.b = s->motion.traj.position.b;
     m_status.absolutePos.c = s->motion.traj.position.c;
 
     // 相对坐标 = 绝对坐标 - 工件偏置
-    m_status.relativePos.x = m_status.absolutePos.x - s->task.g5x_offset.tran.x - s->task.g92_offset.tran.x;
-    m_status.relativePos.y = m_status.absolutePos.y - s->task.g5x_offset.tran.y - s->task.g92_offset.tran.y;
-    m_status.relativePos.z = m_status.absolutePos.z - s->task.g5x_offset.tran.z - s->task.g92_offset.tran.z;
+    m_status.relativePos.tran.x = m_status.absolutePos.tran.x - s->task.g5x_offset.tran.x - s->task.g92_offset.tran.x;
+    m_status.relativePos.tran.y = m_status.absolutePos.tran.y - s->task.g5x_offset.tran.y - s->task.g92_offset.tran.y;
+    m_status.relativePos.tran.z = m_status.absolutePos.tran.z - s->task.g5x_offset.tran.z - s->task.g92_offset.tran.z;
 
     // 工件坐标系位置
     m_status.workPos = m_status.relativePos;
@@ -435,12 +435,12 @@ void LcncCore::mapEmcStatToLcnc(const void *raw)
     m_status.g92Offset.tran.z = s->task.g92_offset.tran.z;
 
     // 程序信息
-    m_status.currentLine = s->task.currentLine;
+    m_status.m_currentLine = s->task.currentLine;
     m_status.programLine = s->task.readLine;
 
     // 当前 G 代码文件
     if (s->task.file[0] != '\0') {
-        m_status.currentFile = QString::fromLocal8Bit(s->task.file);
+        m_status.m_currentFile = QString::fromLocal8Bit(s->task.file);
     }
 
     // 当前活动的 G 代码
@@ -497,8 +497,8 @@ void LcncCore::initSimulation()
     }
 
     // 文件信息
-    m_status.currentFile.clear();
-    m_status.currentLine = 0;
+    m_status.m_currentFile.clear();
+    m_status.m_currentLine = 0;
     m_status.programLine = 0;
     m_status.programUnits = QStringLiteral("mm");
 
@@ -512,15 +512,17 @@ void LcncCore::generateSimulatedStatus()
 
     // 模拟微小的位置变化（模拟震动/噪声）
     double noise = std::sin(m_simTime * 3.14159 * 2.0) * 0.001;
-    m_status.absolutePos.x = noise;
-    m_status.absolutePos.y = noise * 0.5;
-    m_status.absolutePos.z = 0.0;
-    m_status.workPos = m_status.absolutePos;
+    m_status.absolutePos.tran.x = noise;
+    m_status.absolutePos.tran.y = noise * 0.5;
+    m_status.absolutePos.tran.z = 0.0;
+    m_status.workPos.tran.x = m_status.absolutePos.tran.x;
+    m_status.workPos.tran.y = m_status.absolutePos.tran.y;
+    m_status.workPos.tran.z = 0.0;
 
     // 更新轴位置
-    m_status.axes[0].position = m_status.absolutePos.x;
-    m_status.axes[1].position = m_status.absolutePos.y;
-    m_status.axes[2].position = m_status.absolutePos.z;
+    m_status.axes[0].position = m_status.absolutePos.tran.x;
+    m_status.axes[1].position = m_status.absolutePos.tran.y;
+    m_status.axes[2].position = m_status.absolutePos.tran.z;
 
     // 模拟主轴转速变化（如果主轴正在运转）
     if (m_status.spindleState == SpindleState::FORWARD) {
@@ -530,11 +532,11 @@ void LcncCore::generateSimulatedStatus()
     }
 
     // 模拟程序运行时行号递增
-    if (m_status.interpState == InterpState::RUNNING && !m_status.currentFile.isEmpty()) {
+    if (m_status.interpState == InterpState::RUNNING && !m_status.m_currentFile.isEmpty()) {
         if (m_simStep % 3 == 0) {  // 每 300ms 递增一行
-            m_status.currentLine++;
-            if (m_status.currentLine > m_status.programLine) {
-                m_status.currentLine = m_status.programLine;
+            m_status.m_currentLine++;
+            if (m_status.m_currentLine > m_status.programLine) {
+                m_status.m_currentLine = m_status.programLine;
                 m_status.interpState = InterpState::IDLE;
             }
         }
@@ -697,9 +699,9 @@ void LcncCore::sendJogIncrement(int axis, double distance, double velocity)
 
             // 同步更新坐标
             switch (axis) {
-            case 0: m_status.absolutePos.x = newPos; m_status.workPos.x = newPos; break;
-            case 1: m_status.absolutePos.y = newPos; m_status.workPos.y = newPos; break;
-            case 2: m_status.absolutePos.z = newPos; m_status.workPos.z = newPos; break;
+            case 0: m_status.absolutePos.tran.x = newPos; m_status.workPos.tran.x = newPos; break;
+            case 1: m_status.absolutePos.tran.y = newPos; m_status.workPos.tran.y = newPos; break;
+            case 2: m_status.absolutePos.tran.z = newPos; m_status.workPos.tran.z = newPos; break;
             default: break;
             }
         }
@@ -733,8 +735,8 @@ void LcncCore::sendMdi(const QString &cmd)
 void LcncCore::sendProgramOpen(const QString &filename)
 {
     if (m_simulation) {
-        m_status.currentFile = filename;
-        m_status.currentLine = 0;
+        m_status.m_currentFile = filename;
+        m_status.m_currentLine = 0;
         m_status.programLine = 100;  // 模拟 100 行程序
         m_status.interpState = InterpState::IDLE;
     } else {
@@ -749,10 +751,10 @@ void LcncCore::sendProgramOpen(const QString &filename)
 void LcncCore::sendProgramRun()
 {
     if (m_simulation) {
-        if (!m_status.currentFile.isEmpty()) {
+        if (!m_status.m_currentFile.isEmpty()) {
             m_status.motionMode = MotionMode::AUTO;
             m_status.interpState = InterpState::RUNNING;
-            m_status.currentLine = 0;
+            m_status.m_currentLine = 0;
         }
     } else {
 #ifdef Q_OS_LINUX
@@ -765,10 +767,10 @@ void LcncCore::sendProgramRun()
 void LcncCore::sendProgramRun(int line)
 {
     if (m_simulation) {
-        if (!m_status.currentFile.isEmpty()) {
+        if (!m_status.m_currentFile.isEmpty()) {
             m_status.motionMode = MotionMode::AUTO;
             m_status.interpState = InterpState::RUNNING;
-            m_status.currentLine = line;
+            m_status.m_currentLine = line;
         }
     } else {
 #ifdef Q_OS_LINUX
@@ -806,7 +808,7 @@ void LcncCore::sendProgramStop()
 {
     if (m_simulation) {
         m_status.interpState = InterpState::IDLE;
-        m_status.currentLine = 0;
+        m_status.m_currentLine = 0;
     } else {
 #ifdef Q_OS_LINUX
         // TODO: m_command->sendProgramStop();
@@ -818,9 +820,9 @@ void LcncCore::sendProgramStop()
 void LcncCore::sendProgramStep()
 {
     if (m_simulation) {
-        if (!m_status.currentFile.isEmpty()) {
+        if (!m_status.m_currentFile.isEmpty()) {
             m_status.interpState = InterpState::RUNNING;
-            m_status.currentLine++;
+            m_status.m_currentLine++;
             QTimer::singleShot(200, this, [this]() {
                 m_status.interpState = InterpState::PAUSED;
             });
@@ -858,9 +860,9 @@ void LcncCore::sendHome(int axis)
             m_status.axes[axis].homingState = HomingState::HOMING;
 
             switch (axis) {
-            case 0: m_status.absolutePos.x = 0; m_status.workPos.x = 0; break;
-            case 1: m_status.absolutePos.y = 0; m_status.workPos.y = 0; break;
-            case 2: m_status.absolutePos.z = 0; m_status.workPos.z = 0; break;
+            case 0: m_status.absolutePos.tran.x = 0; m_status.workPos.tran.x = 0; break;
+            case 1: m_status.absolutePos.tran.y = 0; m_status.workPos.tran.y = 0; break;
+            case 2: m_status.absolutePos.tran.z = 0; m_status.workPos.tran.z = 0; break;
             default: break;
             }
 

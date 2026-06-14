@@ -409,9 +409,9 @@ void MainWindow::onStatusUpdated()
 
     // 更新刀具路径视图中的当前位置
     m_toolpathView->updateToolPosition(QVector3D(
-        static_cast<float>(st->absolutePos.x),
-        static_cast<float>(st->absolutePos.y),
-        static_cast<float>(st->absolutePos.z)));
+        static_cast<float>(st->absolutePos.tran.x),
+        static_cast<float>(st->absolutePos.tran.y),
+        static_cast<float>(st->absolutePos.tran.z)));
 
     // 更新状态栏
     m_statusBarWidget->updateStatus(*st);

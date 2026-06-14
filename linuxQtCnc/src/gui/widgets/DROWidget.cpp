@@ -356,17 +356,17 @@ void DROWidget::setAxisCount(int count)
 void DROWidget::updateStatus(const LcncStatusData &data)
 {
     // 从 LcncPose 提取各轴坐标数据
-    // LcncPose 包含 x/y/z/a/b/c/u/v/w 字段
+    // LcncPose 包含 tran.x/tran.y/tran.z, a/b/c/u/v/w 字段
     const double absCoords[] = {
-        data.absolutePos.x, data.absolutePos.y, data.absolutePos.z,
+        data.absolutePos.tran.x, data.absolutePos.tran.y, data.absolutePos.tran.z,
         data.absolutePos.a, data.absolutePos.b, data.absolutePos.u
     };
     const double relCoords[] = {
-        data.relativePos.x, data.relativePos.y, data.relativePos.z,
+        data.relativePos.tran.x, data.relativePos.tran.y, data.relativePos.tran.z,
         data.relativePos.a, data.relativePos.b, data.relativePos.u
     };
     const double dtgCoords[] = {
-        data.distanceToGo.x, data.distanceToGo.y, data.distanceToGo.z,
+        data.distanceToGo.tran.x, data.distanceToGo.tran.y, data.distanceToGo.tran.z,
         data.distanceToGo.a, data.distanceToGo.b, data.distanceToGo.u
     };
 

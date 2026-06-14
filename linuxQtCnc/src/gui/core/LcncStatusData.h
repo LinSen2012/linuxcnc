@@ -28,27 +28,37 @@
 // 在 Linux 上集成时，这些类型将来自 LinuxCNC 核心头文件
 
 /// 三维位姿结构体（兼容 LinuxCNC EmcPose）
+/// 与 EmcPose 保持一致：tran 代表平动部分，a/b/c 为旋转轴
+struct LcncTran {
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+};
+
 struct LcncPose {
-    double x = 0.0;  ///< X 轴坐标
-    double y = 0.0;  ///< Y 轴坐标
-    double z = 0.0;  ///< Z 轴坐标
-    double a = 0.0;  ///< A 轴坐标（旋转轴）
-    double b = 0.0;  ///< B 轴坐标（旋转轴）
-    double c = 0.0;  ///< C 轴坐标（旋转轴）
-    double u = 0.0;  ///< U 轴坐标
-    double v = 0.0;  ///< V 轴坐标
-    double w = 0.0;  ///< W 轴坐标
+    LcncTran tran;        ///< 平动部分 (X/Y/Z)
+    double a = 0.0;       ///< A 轴坐标（旋转轴）
+    double b = 0.0;       ///< B 轴坐标（旋转轴）
+    double c = 0.0;       ///< C 轴坐标（旋转轴）
+    double u = 0.0;       ///< U 轴坐标
+    double v = 0.0;       ///< V 轴坐标
+    double w = 0.0;       ///< W 轴坐标
 
     LcncPose() = default;
     LcncPose(double x_, double y_, double z_,
              double a_ = 0.0, double b_ = 0.0, double c_ = 0.0,
              double u_ = 0.0, double v_ = 0.0, double w_ = 0.0)
-        : x(x_), y(y_), z(z_), a(a_), b(b_), c(c_), u(u_), v(v_), w(w_) {}
+        : a(a_), b(b_), c(c_), u(u_), v(v_), w(w_) {
+        tran.x = x_;
+        tran.y = y_;
+        tran.z = z_;
+    }
 
     bool operator==(const LcncPose &other) const {
-        return x == other.x && y == other.y && z == other.z
-            && a == other.a && b == other.b && c == other.c
-            && u == other.u && v == other.v && w == other.w;
+        return tran.x == other.tran.x && tran.y == other.tran.y
+               && tran.z == other.tran.z && a == other.a && b == other.b
+               && c == other.c && u == other.u && v == other.v
+               && w == other.w;
     }
     bool operator!=(const LcncPose &other) const { return !(*this == other); }
 };
@@ -130,6 +140,9 @@ struct LcncToolData {
     double xOffset = 0.0;   ///< X 方向偏置
     double yOffset = 0.0;   ///< Y 方向偏置
     double zOffset = 0.0;   ///< Z 方向偏置
+    double a = 0.0;         ///< A 轴偏置
+    double b = 0.0;         ///< B 轴偏置
+    double c = 0.0;         ///< C 轴偏置
     double diameter = 0.0;  ///< 刀具直径
     double frontAngle = 0.0;///< 前角
     double backAngle = 0.0; ///< 后角
@@ -186,62 +199,45 @@ class LcncStatusData
 {
     Q_GADGET
 
-    // Q_PROPERTY 声明
-    Q_PROPERTY(int taskState      READ taskState      WRITE setTaskState)
-    Q_PROPERTY(int motionMode     READ motionMode     WRITE setMotionMode)
-    Q_PROPERTY(int interpState    READ interpState    WRITE setInterpState)
-    Q_PROPERTY(int spindleState   READ spindleState   WRITE setSpindleState)
-    Q_PROPERTY(double feedrate    READ feedrate       WRITE setFeedrate)
-    Q_PROPERTY(double spindleSpeed READ spindleSpeed    WRITE setSpindleSpeed)
-    Q_PROPERTY(double spindleOverride READ spindleOverride WRITE setSpindleOverride)
-    Q_PROPERTY(double feedOverride READ feedOverride   WRITE setFeedOverride)
-    Q_PROPERTY(int activeGCodes   READ activeGCodes   WRITE setActiveGCodes)
-    Q_PROPERTY(int activeMCodes   READ activeMCodes   WRITE setActiveMCodes)
-    Q_PROPERTY(QString currentFile READ currentFile    WRITE setCurrentFile)
-    Q_PROPERTY(int currentLine    READ currentLine     WRITE setCurrentLine)
+    // Q_PROPERTY (MEMBER) 声明 - 使用 MEMBER 直接绑定到字段，
+    // 避免字段名与 getter 方法名冲突，同时保留字段直接访问能力
+    Q_PROPERTY(int taskState      MEMBER taskState)
+    Q_PROPERTY(int motionMode     MEMBER motionMode)
+    Q_PROPERTY(int interpState    MEMBER interpState)
+    Q_PROPERTY(int spindleState   MEMBER spindleState)
+    Q_PROPERTY(double feedrate    MEMBER feedrate)
+    Q_PROPERTY(double spindleSpeed MEMBER spindleSpeed)
+    Q_PROPERTY(double spindleOverride MEMBER spindleOverride)
+    Q_PROPERTY(double feedOverride MEMBER feedOverride)
+    Q_PROPERTY(QString currentFile MEMBER m_currentFile)
+    Q_PROPERTY(int currentLine    MEMBER m_currentLine)
 
 public:
     LcncStatusData() = default;
 
     // ----- 机床状态 -----
     MachineState taskState = MachineState::ESTOP;
-    int taskState() const { return static_cast<int>(taskState); }
-    void setTaskState(int v) { taskState = static_cast<MachineState>(v); }
 
     // ----- 运动模式 -----
     MotionMode motionMode = MotionMode::MANUAL;
-    int motionMode() const { return static_cast<int>(motionMode); }
-    void setMotionMode(int v) { motionMode = static_cast<MotionMode>(v); }
 
     // ----- 解释器状态 -----
     InterpState interpState = InterpState::IDLE;
-    int interpState() const { return static_cast<int>(interpState); }
-    void setInterpState(int v) { interpState = static_cast<InterpState>(v); }
 
     // ----- 主轴状态 -----
     SpindleState spindleState = SpindleState::STOPPED;
-    int spindleState() const { return static_cast<int>(spindleState); }
-    void setSpindleState(int v) { spindleState = static_cast<SpindleState>(v); }
 
     // ----- 进给速率 -----
     double feedrate = 0.0;
-    double feedrate() const { return feedrate; }
-    void setFeedrate(double v) { feedrate = v; }
 
     // ----- 主轴转速 -----
     double spindleSpeed = 0.0;
-    double spindleSpeed() const { return spindleSpeed; }
-    void setSpindleSpeed(double v) { spindleSpeed = v; }
 
     // ----- 主轴倍率 -----
     double spindleOverride = 1.0;
-    double spindleOverride() const { return spindleOverride; }
-    void setSpindleOverride(double v) { spindleOverride = v; }
 
     // ----- 进给倍率 -----
     double feedOverride = 1.0;
-    double feedOverride() const { return feedOverride; }
-    void setFeedOverride(double v) { feedOverride = v; }
 
     // ----- 坐标位置 -----
     LcncPose absolutePos;    ///< 绝对坐标（机床坐标系）
@@ -255,10 +251,6 @@ public:
     // ----- 当前 G/M 代码 -----
     ActiveGCodes activeGCodesData;
     ActiveMCodes activeMCodesData;
-    int activeGCodes() const { return 0; /* 实际通过 activeGCodesData 访问 */ }
-    void setActiveGCodes(int) {}
-    int activeMCodes() const { return 0; }
-    void setActiveMCodes(int) {}
 
     // ----- 刀具信息 -----
     LcncToolData currentTool;  ///< 当前刀具
@@ -272,12 +264,14 @@ public:
     QVector<LcncAxisStatus> axes;  ///< 各轴状态（最多 9 轴）
 
     // ----- 文件信息 -----
-    QString currentFile;     ///< 当前加载的 G 代码文件
-    int currentLine = 0;     ///< 当前行号
-    QString currentFile() const { return currentFile; }
-    void setCurrentFile(const QString &v) { currentFile = v; }
-    int currentLine() const { return currentLine; }
-    void setCurrentLine(int v) { currentLine = v; }
+    QString m_currentFile;   ///< 当前加载的 G 代码文件
+    int m_currentLine = 0;   ///< 当前行号
+
+    // 便捷访问方法（为兼容旧代码保留，不会与字段名冲突）
+    QString currentFile() const { return m_currentFile; }
+    void setCurrentFile(const QString &v) { m_currentFile = v; }
+    int currentLine() const { return m_currentLine; }
+    void setCurrentLine(int v) { m_currentLine = v; }
 
     // ----- 程序信息 -----
     int programLine = 0;     ///< 程序总行数
@@ -288,6 +282,23 @@ public:
 
     // ----- 错误信息 -----
     QString errorMessage;    ///< 最近错误信息
+
+    // ----- 比较运算符（状态变化检测） -----
+    bool operator==(const LcncStatusData &other) const {
+        return taskState == other.taskState
+            && motionMode == other.motionMode
+            && interpState == other.interpState
+            && spindleState == other.spindleState
+            && feedrate == other.feedrate
+            && spindleSpeed == other.spindleSpeed
+            && spindleOverride == other.spindleOverride
+            && feedOverride == other.feedOverride
+            && m_currentFile == other.m_currentFile
+            && m_currentLine == other.m_currentLine
+            && toolInSpindle == other.toolInSpindle
+            && connected == other.connected;
+    }
+    bool operator!=(const LcncStatusData &other) const { return !(*this == other); }
 };
 
 Q_DECLARE_METATYPE(LcncStatusData)

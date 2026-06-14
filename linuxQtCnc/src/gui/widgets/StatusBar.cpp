@@ -93,16 +93,16 @@ void StatusBarWidget::updateStatus(const LcncStatusData &data)
                           .arg(data.currentTool.diameter, 0, 'f', 1));
 
     // 文件信息
-    if (!data.currentFile.isEmpty()) {
-        m_fileLabel->setText(data.currentFile);
+    if (!data.m_currentFile.isEmpty()) {
+        m_fileLabel->setText(data.m_currentFile);
         m_lineLabel->setText(QStringLiteral("行: %1/%2")
-                              .arg(data.currentLine)
+                              .arg(data.m_currentLine)
                               .arg(data.programLine));
 
         // 进度条
         if (data.programLine > 0) {
             m_progressBar->setMaximum(data.programLine);
-            m_progressBar->setValue(data.currentLine);
+            m_progressBar->setValue(data.m_currentLine);
             m_progressBar->setVisible(true);
         }
     } else {
