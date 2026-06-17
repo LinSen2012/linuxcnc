@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NCK decoder 模块设计模式复查报告</title>
+<style>
+:root {
+  --bg: #ffffff; --bg2: #f8f9fa; --bg3: #e9ecef;
+  --text: #212529; --text2: #495057; --text3: #6c757d;
+  --accent: #2563eb; --accent2: #1d4ed8;
+  --warn: #d97706; --warn-bg: #fffbeb; --warn-border: #fcd34d;
+  --err: #dc2626; --err-bg: #fef2f2; --err-border: #fca5a5;
+  --ok: #059669; --ok-bg: #ecfdf5; --ok-border: #6ee7b7;
+  --info: #0891b2; --info-bg: #ecfeff; --info-border: #67e8f9;
+  --radius: 8px; --shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 24px; background: var(--bg); color: var(--text); line-height: 1.7; }
+h1 { font-size: 1.8em; border-bottom: 3px solid var(--accent); padding-bottom: 12px; color: var(--accent2); }
+h2 { font-size: 1.4em; margin-top: 32px; color: var(--accent2); border-left: 4px solid var(--accent); padding-left: 12px; }
+h3 { font-size: 1.15em; margin-top: 24px; color: var(--text); }
+h4 { font-size: 1em; margin-top: 16px; color: var(--text2); }
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9em; box-shadow: var(--shadow); }
+th { background: var(--accent); color: #fff; padding: 10px 14px; text-align: left; }
+td { padding: 10px 14px; border-bottom: 1px solid var(--bg3); }
+tr:nth-child(even) { background: var(--bg2); }
+tr:hover { background: #e8f0fe; }
+.flow-diagram { background: var(--bg2); border: 1px solid var(--bg3); border-radius: var(--radius); padding: 20px; margin: 16px 0; font-family: 'Courier New', monospace; font-size: 0.85em; line-height: 1.8; white-space: pre; overflow-x: auto; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75em; font-weight: 600; margin-right: 4px; }
+.badge-top { background: #dbeafe; color: #1e40af; }
+.badge-mid { background: #fef3c7; color: #92400e; }
+.badge-bot { background: #d1fae5; color: #065f46; }
+.badge-err { background: var(--err-bg); color: var(--err); }
+.badge-warn { background: var(--warn-bg); color: var(--warn); }
+.badge-ok { background: var(--ok-bg); color: var(--ok); }
+.issue { border-left: 4px solid var(--warn); background: var(--warn-bg); padding: 12px 16px; margin: 12px 0; border-radius: 0 var(--radius) var(--radius) 0; }
+.issue.critical { border-left-color: var(--err); background: var(--err-bg); }
+.issue.info { border-left-color: var(--info); background: var(--info-bg); }
+.issue h4 { margin: 0 0 6px 0; color: var(--text); }
+.issue p { margin: 0; color: var(--text2); }
+.suggestion { border-left: 4px solid var(--ok); background: var(--ok-bg); padding: 12px 16px; margin: 12px 0; border-radius: 0 var(--radius) var(--radius) 0; }
+.suggestion h4 { margin: 0 0 6px 0; color: var(--ok); }
+.suggestion p { margin: 0; color: var(--text2); }
+pre.code { background: #1e293b; color: #e2e8f0; border-radius: var(--radius); padding: 14px 18px; overflow-x: auto; font-size: 0.82em; line-height: 1.6; }
+summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+details { margin: 12px 0; }
+summary code { background: var(--bg2); padding: 2px 6px; border-radius: 4px; }
+.section-card { background: var(--bg2); border-radius: var(--radius); padding: 20px; margin: 20px 0; box-shadow: var(--shadow); }
+.count { font-size: 2em; font-weight: 700; color: var(--accent); }
+.label { font-size: 0.8em; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 20px 0; }
+.stat-card { text-align: center; background: var(--bg2); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+</style>
+</head>
+<body>
+
+<h1>NCK/decoder 模块设计模式复查报告</h1>
+<p><strong>日期：</strong>2026-06-17 | <strong>审查范围：</strong>NCK/decoder/ 下全部 15 个模块 (30 个源文件)</p>
+
+<div class="stats">
+  <div class="stat-card"><div class="count">2</div><div class="label">顶层入口模块</div></div>
+  <div class="stat-card"><div class="count">1</div><div class="label">运动执行底层</div></div>
+  <div class="stat-card"><div class="count">12</div><div class="label">中层功能模块</div></div>
+  <div class="stat-card"><div class="count">1</div><div class="label">公共常量定义</div></div>
+  <div class="stat-card"><div class="count">~6500</div><div class="label">总代码行数 (估)</div></div>
+  <div class="stat-card"><div class="count">15</div><div class="label">发现问题数</div></div>
+</div>
+
+<!-- ============================================================ -->
+<h2>一、层次架构与数据流</h2>
+<!-- ============================================================ -->
+
+<h3>1.1 分层关系总览</h3>
+
+<div class="flow-diagram">
+┌─────────────────────────────────────────────────────────────────────┐
+│                          gparse.c/h                                   │
+│  【顶层 - 解析入口】 gc_execute_line → gc_parse_word → gc_update_modal│
+│  输入: char *line (G代码文本行)                                        │
+│  输出: uint8_t error_code, 更新 gc_state.modal / target[] / offset[]  │
+└──────────┬───────────────────────────────────────┬──────────────────┘
+           │ 调用                                   │ 调用
+           ▼                                        ▼
+┌──────────────────────┐              ┌──────────────────────────────┐
+│   nck_aux.c/h        │              │    subprog.c/h               │
+│   辅助M代码(M3/M4/M5  │              │    M98/M99子程序系统          │
+│   M7/M8/M9)          │              │    输入: program_number       │
+│   输入: spindle_mode  │              │    输出: subprog状态/下一行   │
+│         coolant_mode  │              └──────────────────────────────┘
+│   输出: 调用L3物理层   │
+└──────────────────────┘              ┌──────────────────────────────┐
+                                      │    macroprog.c/h             │
+                                      │    G65/G66/G67宏程序系统      │
+┌──────────────────────┐              │    输入: program_number+args  │
+│   gcode.c/h           │◄────────────│    输出: 宏执行结果            │
+│  【底层 - 运动执行】   │  分发调用    └──────────────────────────────┘
+│  gc_execute_motion_   │
+│  command() 统一入口    │
+│                       │
+│  内部静态辅助函数:      │
+│  gc_exec_g0 / g1 /     │
+│  g2_g3 / fixed_cycle   │
+│  g28_g30 / probe /     │
+│  g10 / g33             │
+│                       │
+│  输入: motion, target, │
+│        offset, flags   │
+│  输出: 调用mc_line/    │
+│        mc_arc/mc_dwell │
+└───┬──────┬──────┬─────┴──┬──────────┬──────────┬──────────────────┘
+    │      │      │        │          │          │
+    ▼      ▼      ▼        ▼          ▼          ▼
+ fixedcycle  radiuscomp  rigidtap  gc_tool    gc_coord   gc_error
+   │           │          │         │           │
+   │           │          │         ▼           │
+   │           │          │    lengthcomp       │
+   │           │          │    (下层纯计算)      │
+   │           │          │                     │
+   ▼           ▼          ▼                     ▼
+ tooltipcomp  (车床)  user_extend           gmcodedef.h
+ (车床专用)          (回调框架)             (公共常量)
+</div>
+
+<h3>1.2 各模块输入/输出详表</h3>
+
+<table>
+<tr><th style="width:120px">模块名</th><th style="width:70px">层级</th><th>核心输入</th><th>核心输出</th><th>职责</th></tr>
+
+<tr>
+  <td><strong>gparse.c</strong></td>
+  <td><span class="badge badge-top">顶层</span></td>
+  <td>char *line (G代码行) + gc_state 当前上下文</td>
+  <td>uint8_t error_code + 更新 target[]/offset[]/modal值 + 调用后续模块</td>
+  <td>文本解析、模态状态更新、子程序/宏程序/运动分发</td>
+</tr>
+
+<tr>
+  <td><strong>gcode.c</strong></td>
+  <td><span class="badge badge-bot">底层</span></td>
+  <td>motion类型, float target[6], float offset[3], axis_flags[6]</td>
+  <td>uint8_t error_code + 调用 mc_line/mc_arc/mc_dwell → L3层</td>
+  <td>统一运动分发 → L3运动控制层</td>
+</tr>
+
+<tr>
+  <td><strong>fixedcycle.c</strong></td>
+  <td><span class="badge badge-mid">中层</span></td>
+  <td>x,y,z 目标 + R点 + Q/P参数 + L循环次数 + gc_state.feed_rate</td>
+  <td>MC_MOTION_RAPID / MC_MOTION_FEED → mc_line + 更新 gc_state.input</td>
+  <td>G81-G89 固定循环：G81-G89逐运动段执行</td>
+</tr>
+
+<tr>
+  <td><strong>radiuscompensation.c</strong></td>
+  <td><span class="badge badge-mid">中层</span></td>
+  <td>轮廓段 (rc_segment_t) 一系列 + 刀具半径 + 补偿方向</td>
+  <td>补偿后输出点 (rc_output_point_t[]) + 含拐角过渡处理</td>
+  <td>G41/G42/G40 刀具半径补偿 + 拐角过渡</td>
+</tr>
+
+<tr>
+  <td><strong>rigidtapping.c</strong></td>
+  <td><span class="badge badge-mid">中层</span></td>
+  <td>pitch(螺距), depth, rpm, direction + 编码器计数值</td>
+  <td>rigid_tapping_* 状态机输出 + Z轴同步位置</td>
+  <td>G33 刚性攻丝工艺逻辑 (4阶段状态机)</td>
+</tr>
+
+<tr>
+  <td><strong>lengthcompensation.c</strong></td>
+  <td><span class="badge badge-bot">下层</span></td>
+  <td>float z (原始Z坐标) + lc_state[ch].offset/direction</td>
+  <td>float 补偿后Z坐标 (z + offset或 z - offset)</td>
+  <td>G43/G44/G49 纯补偿计算</td>
+</tr>
+
+<tr>
+  <td><strong>gc_tool.c</strong></td>
+  <td><span class="badge badge-mid">中层</span></td>
+  <td>G43/G44/G49 方向 + Z坐标</td>
+  <td>调用 lc_enable/lc_disable/lc_compensate</td>
+  <td>G代码→lc接口的适配层 (Adapter模式)</td>
+</tr>
+
+<tr>
+  <td><strong>gc_coord.c</strong></td>
+  <td><span class="badge badge-mid">中层</span></td>
+  <td>坐标系编号(G54-G59) + 轴偏移值</td>
+  <td>坐标系偏移写入/读取 + 工件↔机床坐标变换</td>
+  <td>G54-G59坐标系管理、G90/G91模式</td>
+</tr>
+
+<tr>
+  <td><strong>gc_error.c</strong></td>
+  <td><span class="badge badge-mid">中层</span></td>
+  <td>uint16_t error_code + uint32_t line_number</td>
+  <td>error消息字符串 + 写入日志</td>
+  <td>错误码管理与报告</td>
+</tr>
+
+<tr>
+  <td><strong>nck_aux.c</strong></td>
+  <td><span class="badge badge-mid">中层</span></td>
+  <td>spindle_mode(M3/M4/M5) + spindle_speed + coolant_mode</td>
+  <td>调用 spindle_set_state / coolant_set_state (L3)</td>
+  <td>辅助M代码(M3/M4/M5/M7/M8/M9)执行</td>
+</tr>
+
+<tr>
+  <td><strong>subprog.c</strong></td>
+  <td><span class="badge badge-mid">中层</span></td>
+  <td>program_number (uint32_t) + loop_count + 程序文本内容</td>
+  <td>下一行G代码文本 (char *) + 调用栈状态</td>
+  <td>M98/M99 子程序调用/返回 + 最多10层嵌套</td>
+</tr>
+
+<tr>
+  <td><strong>macroprog.c</strong></td>
+  <td><span class="badge badge-mid">中层</span></td>
+  <td>program_number + macro_args[26] + 变量系统(#1-#33/#100-#299/#500-#999)</td>
+  <td>表达式计算结果 / 控制流跳转 + 变量值</td>
+  <td>G65/G66/G67 宏程序系统 + 表达式计算 + IF/WHILE/GOTO</td>
+</tr>
+
+<tr>
+  <td><strong>tooltipcomp.c</strong></td>
+  <td><span class="badge badge-mid">中层</span></td>
+  <td>编程点 (XZ平面) + 进给方向 + 刀尖参数 (R, α)</td>
+  <td>补偿后刀尖点坐标 + 切入/切出过渡点</td>
+  <td>车床TTPC刀尖点补偿 (G41/G42 XZ平面)</td>
+</tr>
+
+<tr>
+  <td><strong>userextend.c</strong></td>
+  <td><span class="badge badge-mid">中层</span></td>
+  <td>扩展G/M/T/D/H代码 + user_code_params_t + 回调函数</td>
+  <td>回调执行结果 + 刀具表读写</td>
+  <td>用户自定义扩展代码回调框架 + 刀具表管理</td>
+</tr>
+
+<tr>
+  <td><strong>gmcodedef.h</strong></td>
+  <td><span class="badge badge-mid">公共</span></td>
+  <td>— (纯常量，无输入)</td>
+  <td>G/M代码常量 + 模态组编号 + 统一错误码</td>
+  <td>全模块共享的常量定义</td>
+</tr>
+</table>
+
+<h3>1.3 代码执行流程</h3>
+
+<div class="flow-diagram">
+上层调用 gc_execute_line(ch, line)
+  │
+  ├─ 1. gc_parse_word() 逐词解析 ─── 填 target[]/offset[]/axis_flags[]
+  │
+  ├─ 2. gc_update_modal() 更新模态 ── 更新 gc_state.modal.xxx / motion / has_motion
+  │     ├─ G0/G1/G2/G3 → 运动指令
+  │     ├─ G17/G18/G19 → 平面选择
+  │     ├─ G90/G91 → 距离模式
+  │     ├─ G54-G59 → 坐标系选择
+  │     ├─ G40/G41/G42 → 刀具半径补偿
+  │     ├─ G43/G44/G49 → 刀具长度补偿
+  │     ├─ G98/G99 → 返回模式
+  │     ├─ M3/M4/M5 → 主轴
+  │     ├─ M7/M8/M9 → 冷却
+  │     ├─ S → 主轴转速
+  │     ├─ F → 进给速度
+  │     └─ T → 刀具号
+  │
+  ├─ 3. nck_aux_execute(ch) ───────── 执行辅助功能 (主轴/冷却液)
+  │
+  ├─ 4. 子程序/宏程序处理
+  │     ├─ M98 → subprog_handle_m98 → subprog_call → 栈帧推入
+  │     ├─ M99 → subprog_handle_m99 → subprog_return → 栈帧弹出
+  │     ├─ G65 → macro_handle_g65 → macro_call_non_modal
+  │     ├─ G66 → macro_handle_g66 → macro_call_modal
+  │     └─ G67 → macro_handle_g67 → macro_cancel_modal
+  │
+  └─ 5. gc_execute_motion_command(ch, motion, target, offset, flags)
+        │
+        ├─ G0  → gc_exec_g0  → gc_nurbs_flush → gc_execute_motion (RAPID)
+        ├─ G1  → gc_exec_g1  → 半径补偿? → rc_add_line → rc_process
+        │                      → NURBS? → smoother_feed
+        │                      → 无补偿 → gc_execute_motion (FEED)
+        ├─ G2/G3 → gc_exec_g2_g3 → 半径补偿? → rc_add_arc → rc_process
+        │                          → 无补偿 → gc_arc
+        ├─ G81-G89 → gc_exec_fixed_cycle → fixed_cycle_execute (→ rigid_tapping)
+        ├─ G28/G30 → gc_exec_g28_g30 → gc_goto_reference_position
+        ├─ G38.x → gc_exec_probe → gc_probe (等待探针状态)
+        ├─ G10 → gc_exec_g10 → gc_set_coordinate_system
+        └─ G33 → gc_exec_g33 → gc_rigid_tapping → rigid_tapping_start/execute
+</div>
+
+<!-- ============================================================ -->
+<h2>二、设计模式合规性审查</h2>
+<!-- ============================================================ -->
+
+<div class="section-card">
+<h3>审查维度</h3>
+<p>依据经典设计模式（GoF 23种）及 SOLID 原则逐项审查 decoder 目录下全部代码。</p>
+</div>
+
+<!-- Issue 1 -->
+<div class="issue critical">
+<h4>🔴 P0-1：gc_update_modal() — 巨型 if-else 链，违反开闭原则 (OCP) 和单一职责原则 (SRP)</h4>
+<p><strong>文件：</strong>gparse.c:160-300 | <strong>约140行连续 if-else</strong></p>
+<p><strong>问题：</strong>每新增一个G/M代码支持，必须修改这个巨型函数，违反OCP。G字 (65行) 和M字 (15行) 的所有处理逻辑堆叠在同一个函数中，单一函数承担了"G代码识别 + M代码识别 + S/F/T字处理"三重职责。</p>
+<p><strong>影响：</strong>代码可读性极差，测试困难，修改风险高。</p>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：策略模式 (Strategy) + 查表法</h4>
+<p>使用静态查找表替代 if-else 链：</p>
+<pre class="code">// 定义命令处理器函数指针类型
+typedef uint8_t (*gcode_handler_t)(uint8_t ch, float value, 
+    uint8_t *motion, uint8_t *has_motion, uint8_t *group);
+
+// G代码静态映射表
+typedef struct { uint8_t code; uint8_t group; 
+                 uint8_t motion; gcode_handler_t handler; } gcode_table_entry_t;
+
+static const gcode_table_entry_t g_code_table[] = {
+    {GC_G0,  GC_GROUP_MODAL_G0, GC_G0,  NULL},
+    {GC_G1,  GC_GROUP_MODAL_G1, GC_G1,  NULL},
+    {GC_G17, GC_GROUP_MODAL_G17_19, 0,  gc_set_plane_handler},
+    // ... 
+};
+// gc_update_modal 缩减为: 查表 → 调用 handler (或无handler直接设置modal)
+</pre>
+</div>
+
+<!-- Issue 2 -->
+<div class="issue critical">
+<h4>🔴 P0-2：gc_execute_line() 函数过长 — 违反单一职责原则 (SRP)</h4>
+<p><strong>文件：</strong>gparse.c:302-430 | <strong>约130行</strong></p>
+<p><strong>问题：</strong>单一函数承担了：词法解析 (while循环)、模态更新、各轴坐标赋值 (X/Y/Z/A/B/C/I/J/K/P/Q/L/D 共14个if分支)、辅助功能执行、子程序处理、宏程序处理、运动指令执行。七种职责混在一个函数中。</p>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：模板方法模式 (Template Method) + 命令模式 (Command)</h4>
+<p>将解析流程拆分为独立阶段，每阶段一个函数：</p>
+<pre class="code">uint8_t gc_execute_line(uint8_t ch, char *line) {
+    // 阶段1: 词法解析 → 填充 parsed_words[]
+    error = gc_parse_line_lex(ch, line, &parsed);
+    // 阶段2: 语义处理 → 根据parsed_words更新modal和target
+    error = gc_process_words(ch, &parsed, &motion, target, offset, flags);
+    // 阶段3: 辅助功能
+    nck_aux_execute(ch);
+    // 阶段4: 子程序/宏程序处理
+    error = gc_handle_program_flow(ch, motion);
+    // 阶段5: 运动执行
+    error = gc_execute_motion_command(ch, motion, target, offset, flags);
+    return error;
+}
+</pre>
+</div>
+
+<!-- Issue 3 -->
+<div class="issue">
+<h4>🟡 P1-1：全局状态暴露 — 违反封装原则和迪米特法则</h4>
+<p><strong>涉及文件：</strong>decoder/ 下几乎所有 .c 文件</p>
+<p><strong>问题：</strong>所有模块通过 <code>chan[ch].dcd.ptr_gc_state->xxx</code> 直接访问其他模块的内部状态，链式调用深度达到 4-5 级。例如 <code>fixedcycle.c</code> 中：<br>
+<code>chan[ch].dcd.ptr_gc_state->ptr_modal->modal_g40_42</code> — 穿透了 channel_t → decoder_t → gc_state_t → gc_modal_t 四层结构。</p>
+<p><strong>违反：</strong>
+迪米特法则 (Law of Demeter)：模块不应知道其"朋友的朋友"的内部结构。<br>
+封装原则：各模块应通过接口访问而非直接访问结构体成员。</p>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：外观模式 (Facade) + 访问器函数</h4>
+<p>为 decoder 模块提供统一的上下文访问接口，各子模块只通过接口函数获取所需数据：</p>
+<pre class="code">// decoder_context.h — decoder 统一上下文接口
+float dc_get_current_x(uint8_t ch);
+float dc_get_current_z(uint8_t ch);
+float dc_get_feed_rate(uint8_t ch);
+uint8_t dc_get_modal_g40_42(uint8_t ch);
+void dc_set_current_z(uint8_t ch, float z);
+// ... 约20-30个访问器函数
+// 替代所有 chan[ch].dcd.ptr_gc_state->xxx 模式
+</pre>
+</div>
+
+<!-- Issue 4 -->
+<div class="issue">
+<h4>🟡 P1-2：gcode.c 和 fixedcycle.c 中运动执行代码重复</h4>
+<p><strong>文件：</strong>gcode.c (gc_execute_motion等) vs fixedcycle.c (fixed_cycle_rapid_move, fixed_cycle_feed_move)</p>
+<p><strong>问题：</strong>两处都有"构造 mc_motion_t → 填充 target/position/feed_rate → 调用 mc_line → 更新 gc_state.input"的相同代码模式。fixedcycle.c 内部的辅助函数与 gcode.c 的 gc_execute_motion 几乎完全重复，差异仅在于 target 坐标的填充方式。</p>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：模板方法模式</h4>
+<p>提取公共的运动执行基函数：</p>
+<pre class="code">// 统一的单段运动执行器
+static uint8_t gc_exec_single_move(uint8_t ch, float *target, 
+    uint8_t motion_type, uint8_t update_input) {
+    // 构造 mc_motion_t, 调用 mc_line, 更新 gc_state.input
+    // 所有模块复用此函数
+}
+</pre>
+</div>
+
+<!-- Issue 5 -->
+<div class="issue">
+<h4>🟡 P1-3：subprog.c 和 macroprog.c 存在大量结构重复</h4>
+<p><strong>涉及文件：</strong>subprog.c/h vs macroprog.c/h</p>
+<p><strong>问题：</strong>两个模块实现了几乎相同的设计模式：</p>
+<ul>
+<li>管理器结构体 (subprog_manager_t vs macro_manager_t) — 结构高度相似</li>
+<li>调用栈帧 (subprog_stack_frame_t vs macro_stack_frame_t) — 字段80%相同</li>
+<li>程序注册/查找/注销 — 完全相同的模式，仅结构体名不同</li>
+<li>execute_next / get_line_at_index — 完全相同的实现逻辑</li>
+<li>parse_program_number / parse_loop_count — 代码一字不差</li>
+<li>debug函数 (print_stack/print_programs/print_status) — 相同结构</li>
+</ul>
+<p><strong>重复度估算：</strong>约 60% 的代码可合并为公共基类/模板。</p>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：提取公共抽象基模块</h4>
+<pre class="code">// program_manager.h — 通用程序管理器 (抽象子程序和宏程序的公共部分)
+typedef struct { /* 通用程序信息 */ } program_info_t;
+typedef struct { /* 通用调用栈帧 */ } program_stack_frame_t;
+
+// 通用操作接口
+uint16_t prog_manager_register(uint8_t ch, ...);
+uint16_t prog_manager_call(uint8_t ch, ...);
+uint16_t prog_manager_return(uint8_t ch);
+char*    prog_manager_get_line_at_index(program_info_t *, uint32_t);
+
+// subprog.c / macroprog.c 缩减为薄的适配层，仅处理差异化逻辑
+// (子程序的M98/M99映射、宏程序的变量系统和表达式计算)
+</pre>
+</div>
+
+<!-- Issue 6 -->
+<div class="issue">
+<h4>🟡 P1-4：半径补偿 (radiuscompensation) 和刀尖补偿 (tooltipcomp) 缺少统一接口</h4>
+<p><strong>涉及文件：</strong>radiuscompensation.c/h + tooltipcomp.c/h</p>
+<p><strong>问题：</strong>两者都实现了刀具补偿功能，但：</p>
+<ul>
+<li>radiuscompensation 有 ch 参数（多通道），tooltipcomp 没有（全局单实例）</li>
+<li>radiuscompensation 用 N_CHANNEL 数组管理状态，tooltipcomp 用全局 ttpc_state</li>
+<li>接口风格不同：rc_add_line/rc_process/rc_get_next_point vs ttpc_compensate_line_xz</li>
+<li>两者都有 enable/disable/is_enabled — 但签名不同</li>
+<li>两者都有独立的 error 处理 — 但错误码体系不同</li>
+</ul>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：策略模式 + 统一补偿接口</h4>
+<pre class="code">// compensation.h — 统一补偿接口
+typedef struct {
+    void (*init)(uint8_t ch);
+    void (*enable)(uint8_t ch, ...);
+    void (*disable)(uint8_t ch);
+    uint8_t (*is_enabled)(uint8_t ch);
+    uint8_t (*compensate)(uint8_t ch, ...);
+} compensation_vtable_t;
+// radiuscompensation 和 tooltipcomp 各自实现该接口
+// 同时将 tooltipcomp 也改造为多通道 (加 ch 参数)
+</pre>
+</div>
+
+<!-- Issue 7 -->
+<div class="issue">
+<h4>🟡 P1-5：gc_execute_motion_command() 使用 if-else 链做运动分发</h4>
+<p><strong>文件：</strong>gcode.c:148-177</p>
+<p><strong>问题：</strong>虽然已经比之前好（提取了静态辅助函数），但分发逻辑仍是 10+ 个 if-else 条件判断链。新增运动类型仍需修改此函数。</p>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：命令模式 + 查表法</h4>
+<pre class="code">typedef uint8_t (*motion_executor_t)(uint8_t ch, uint8_t motion, 
+    float *target, float *offset, uint8_t *flags);
+
+typedef struct {
+    uint8_t motion_min;
+    uint8_t motion_max;
+    motion_executor_t executor;
+} motion_dispatch_entry_t;
+
+static const motion_dispatch_entry_t motion_table[] = {
+    {GC_G0,  GC_G0,  gc_exec_g0},
+    {GC_G1,  GC_G1,  gc_exec_g1},
+    {GC_G2,  GC_G3,  gc_exec_g2_g3},
+    {GC_G81, GC_G89, gc_exec_fixed_cycle},
+    {GC_G28, GC_G30, gc_exec_g28_g30},
+    // ...
+};
+</pre>
+</div>
+
+<!-- Issue 8 -->
+<div class="issue">
+<h4>🟡 P1-6：错误处理不一致</h4>
+<p><strong>涉及文件：</strong>解码器全部模块</p>
+<p><strong>问题：</strong></p>
+<ul>
+<li>gparse.c/gcode.c 使用 SYS_STATUS_* (0x0000-0x01FF) 错误码</li>
+<li>gc_error.c 使用 GC_ERROR_* (0x0200-0x03FF)</li>
+<li>subprog.c 使用 SUBPROG_STATUS_* (0x0400-0x05FF)</li>
+<li>macroprog.c 使用 MACRO_STATUS_* (0x0600-0x07FF)</li>
+<li>但各模块混用：fixedcycle.c 返回 SYS_STATUS_WRONG_CHANNEL_INDEX，error 定义在 gc_error.h 中却很少被实际调用</li>
+<li>某些函数返回 uint8_t，某些返回 uint16_t，类型不统一</li>
+<li>没有统一的错误传播机制 — 每个调用点都需要手动检查并返回</li>
+</ul>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：统一错误码类型 + 错误传播宏</h4>
+<pre class="code">// 统一使用 uint16_t 错误码
+typedef uint16_t nck_status_t;
+
+// 错误传播宏 (类似 Rust 的 ? 操作符)
+#define NCK_TRY(expr) do { \
+    nck_status_t _s = (expr); \
+    if (_s != SYS_STATUS_OK) return _s; \
+} while(0)
+
+// 使用示例
+nck_status_t gc_execute_line(uint8_t ch, char *line) {
+    NCK_TRY(gc_parse_line_lex(ch, line, &parsed));
+    NCK_TRY(gc_process_words(ch, &parsed, &motion, target, offset, flags));
+    // ...
+}
+</pre>
+</div>
+
+<!-- Issue 9 -->
+<div class="issue">
+<h4>🟡 P1-7：gc_parse_word() 存在重复解析</h4>
+<p><strong>文件：</strong>gparse.c:113-135 + gc_execute_line() 内各轴字处理</p>
+<p><strong>问题：</strong>gc_parse_word() 调用 mc_read_float() 解析了一个 float value，但在 gc_execute_line() 中处理 X/Y/Z/A/B/C/I/J/K/R/P/Q/L/D 字时，又<strong>再次</strong>调用 mc_read_float() 读取同一个值。这意味着每个坐标字被解析了两次。</p>
+<pre class="code">// gc_parse_word 中: mc_read_float(line, &char_counter, &value) — 第1次
+// gc_execute_line 中各字处理: mc_read_float(line, &char_counter, &value) — 第2次!
+</pre>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：一次解析，统一使用</h4>
+<p>gc_parse_word() 解析后的 value 应该直接存入统一的 parsed_word 结构体，后续处理不再重复调用 mc_read_float()。</p>
+</div>
+
+<!-- Issue 10 -->
+<div class="issue">
+<h4>🟡 P1-8：所有模块的 init 函数模式重复但无统一接口</h4>
+<p><strong>涉及文件：</strong>所有模块的 init 函数</p>
+<p><strong>问题：</strong>decoder 目录下有 10+ 个 *_init(ch) 函数，它们都有相似的模式（检测 ch 越界 → memset → 设置默认值），但没有统一的初始化接口。gc_init() 中需要逐个手动调用：</p>
+<pre class="code">void gc_init() {
+    // 手动初始化 gc_state (40行)
+    gc_coord_init();       // 全局单次
+    for (ch = 0; ch < N_CHANNEL; ch++) {
+        gc_tool_init(ch);
+        subprog_init(ch);
+        macro_init(ch);
+        rc_init(ch);
+        user_extend_init(ch);
+        fixed_cycle_init(ch);
+    }
+    gc_error_init();
+}
+</pre>
+<p>如果有新模块，需要手动在 gc_init() 中添加调用。</p>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：注册/观察者模式</h4>
+<pre class="code">// 模块自注册
+typedef void (*module_init_fn)(uint8_t ch);
+void decoder_register_module(const char *name, module_init_fn per_channel, 
+                              void (*global_init)(void));
+
+// 各模块在编译时自动注册：
+DECODER_MODULE(gc_tool, gc_tool_init, NULL);
+DECODER_MODULE(subprog, subprog_init, NULL);
+
+// gc_init 缩减为：
+void gc_init() {
+    decoder_init_all_modules();  // 自动遍历注册列表
+}
+</pre>
+</div>
+
+<!-- Issue 11 -->
+<div class="issue">
+<h4>🟢 P2-1：半径补偿模块中 rc_process_segment() 为空实现</h4>
+<p><strong>文件：</strong>radiuscompensation.c:271-277</p>
+<pre class="code">uint8_t rc_process_segment(uint8_t ch, rc_segment_t *seg, 
+    rc_segment_t *prev_seg, rc_segment_t *next_seg) {
+    (void)ch; (void)prev_seg; (void)next_seg;
+    if (!seg) { return 0; }
+    return 1;  // 空实现，总是返回成功
+}</pre>
+<p><strong>问题：</strong>该函数在头文件中声明为公共接口，但实现为空壳。要么是未完成的功能，要么应该删除避免误导调用者。</p>
+</div>
+
+<!-- Issue 12 -->
+<div class="issue">
+<h4>🟢 P2-2：tooltipcomp 未多通道化</h4>
+<p><strong>文件：</strong>tooltipcomp.c/h</p>
+<p><strong>问题：</strong>decoder 目录下所有其他模块都实现了多通道（带 uint8_t ch 参数），唯独 tooltipcomp 使用全局单实例 <code>ttpc_state</code>。这破坏了模块间的一致性。</p>
+</div>
+
+<!-- Issue 13 -->
+<div class="issue">
+<h4>🟢 P2-3：userextend 中 5 个 find_*_slot 函数的代码完全相同</h4>
+<p><strong>文件：</strong>userextend.c:591-649</p>
+<p><strong>问题：</strong>user_find_g_code_slot / user_find_m_code_slot / user_find_t_code_slot / user_find_d_code_slot / user_find_h_code_slot 五个函数仅在访问的数组名不同，其余逻辑完全一致。</p>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：提取为通用宏或模板函数</h4>
+<pre class="code">static int16_t user_find_code_slot(uint8_t ch, user_code_entry_t *table, 
+    uint8_t max_count, uint16_t code) {
+    for (int i = 0; i < max_count; i++) {
+        if (table[i].is_registered && table[i].code == code) return i;
+    }
+    return -1;
+}
+// 各 find 函数变为一行:
+#define USER_FIND(ch, arr, code) user_find_code_slot(ch, arr, \
+    sizeof(arr)/sizeof(arr[0]), code)
+</pre>
+</div>
+
+<!-- Issue 14 -->
+<div class="issue">
+<h4>🟢 P2-4：刚性攻丝中紧急退刀使用了阻塞式 while(1) 循环</h4>
+<p><strong>文件：</strong>rigidtapping.c:286-310</p>
+<pre class="code">while (1) {
+    spindle_count = encoder_get_spindle_count() - ...;
+    if (...) break;
+    if ((hal_get_tick_ms() - start_tick) >= timeout_ms) break;
+    if (encoder_get_rpm_filtered() < 10) break;
+    hal_delay_ms(1);  // 阻塞等待
+}</pre>
+<p><strong>问题：</strong>紧急退刀是实时安全关键操作，但使用了阻塞 while 循环 + hal_delay_ms(1)。在嵌入式系统中，这会阻塞整个主循环，无法响应其他通道或紧急停止信号。应改为状态机驱动。</p>
+</div>
+
+<div class="suggestion">
+<h4>✅ 整改建议：将紧急退刀改为状态机</h4>
+<p>紧急退刀不应阻塞等待，而应像 rigid_tapping_execute() 一样每次调用执行一步，由调度器周期调用直到完成。</p>
+</div>
+
+<!-- Issue 15 -->
+<div class="issue">
+<h4>🟢 P2-5：fixedcycle 内部大量重复的目标位置计算代码</h4>
+<p><strong>文件：</strong>fixedcycle.c</p>
+<p><strong>问题：</strong>fixed_cycle_rapid_move / fixed_cycle_feed_move / gc_execute_motion / userextend user_tool_change / gcode.c gc_probe 等多处都有"初始化 target[N_AXIS] 为当前位置 → 修改 XYZ → 构造 mc_motion_t → 调用 mc_line → 更新 gc_state.input"的重复模式，几乎一模一样。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>三、SOLID 原则评分</h2>
+<!-- ============================================================ -->
+
+<table>
+<tr><th>原则</th><th>评分</th><th>说明</th></tr>
+<tr>
+  <td><strong>S</strong> - 单一职责</td>
+  <td><span class="badge badge-err">⭐⭐</span></td>
+  <td>gparse.c 的 gc_execute_line 和 gc_update_modal 承担过多职责；各模块职责边界清晰但实现中混杂</td>
+</tr>
+<tr>
+  <td><strong>O</strong> - 开闭原则</td>
+  <td><span class="badge badge-err">⭐</span></td>
+  <td>gc_update_modal / gc_execute_motion_command 中大量 if-else，新增G/M代码必须修改核心函数；userextend 的回调机制是亮点</td>
+</tr>
+<tr>
+  <td><strong>L</strong> - 里氏替换</td>
+  <td><span class="badge badge-ok">⭐⭐⭐⭐</span></td>
+  <td>模块间通过统一的 ch 参数和错误码交互，接口一致性较好</td>
+</tr>
+<tr>
+  <td><strong>I</strong> - 接口隔离</td>
+  <td><span class="badge badge-warn">⭐⭐⭐</span></td>
+  <td>各模块 .h 文件接口相对独立，但所有模块都通过 chan[ch] 全局访问对方内部状态，依赖过重</td>
+</tr>
+<tr>
+  <td><strong>D</strong> - 依赖倒置</td>
+  <td><span class="badge badge-warn">⭐⭐</span></td>
+  <td>整体是从上到下的硬依赖链 (gparse→gcode→L3)；gcode.c 封装了主轴/冷却液访问是好的实践，但范围有限</td>
+</tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>四、整改优先级路线图</h2>
+<!-- ============================================================ -->
+
+<div class="section-card">
+<h3>整改建议优先级（遵循"最小变更"原则）</h3>
+
+<table>
+<tr><th>优先级</th><th>整改项</th><th>影响范围</th><th>风险</th><th>收益</th></tr>
+<tr>
+  <td><span class="badge badge-err">P0</span></td>
+  <td><strong>gc_update_modal 查表化</strong> — if-else → 静态查找表</td>
+  <td>gparse.c 单文件</td>
+  <td>低</td>
+  <td>极高 — 可读性、可扩展性大幅提升</td>
+</tr>
+<tr>
+  <td><span class="badge badge-err">P0</span></td>
+  <td><strong>gc_parse_word 重复解析消除</strong> — 各轴字不再二次调用 mc_read_float</td>
+  <td>gparse.c 单文件</td>
+  <td>低</td>
+  <td>高 — 修复逻辑缺陷，性能提升</td>
+</tr>
+<tr>
+  <td><span class="badge badge-warn">P1</span></td>
+  <td><strong>subprog/macroprog 公共代码提取</strong> — 消除约60%重复</td>
+  <td>新文件 program_manager + 修改 subprog/macroprog</td>
+  <td>中</td>
+  <td>高 — 减少维护负担</td>
+</tr>
+<tr>
+  <td><span class="badge badge-warn">P1</span></td>
+  <td><strong>gc_execute_motion_command 查表化</strong> — if-else → 调度表</td>
+  <td>gcode.c 单文件</td>
+  <td>低</td>
+  <td>中 — 易于扩展新运动类型</td>
+</tr>
+<tr>
+  <td><span class="badge badge-warn">P1</span></td>
+  <td><strong>运动执行代码去重</strong> — 提取 gc_exec_single_move 公共函数</td>
+  <td>gcode.c + fixedcycle.c + userextend.c</td>
+  <td>中</td>
+  <td>中 — 减少代码重复</td>
+</tr>
+<tr>
+  <td><span class="badge badge-warn">P1</span></td>
+  <td><strong>统一错误处理</strong> — uint16_t 类型 + NCK_TRY 宏</td>
+  <td>全局</td>
+  <td>高</td>
+  <td>高 — 统一错误传播</td>
+</tr>
+<tr>
+  <td><span class="badge badge-ok">P2</span></td>
+  <td><strong>tooltipcomp 多通道化</strong></td>
+  <td>tooltipcomp.c/h + 调用方</td>
+  <td>低</td>
+  <td>低 — 架构一致性</td>
+</tr>
+<tr>
+  <td><span class="badge badge-ok">P2</span></td>
+  <td><strong>紧急退刀非阻塞化</strong></td>
+  <td>rigidtapping.c</td>
+  <td>中</td>
+  <td>中 — 安全关键</td>
+</tr>
+<tr>
+  <td><span class="badge badge-ok">P2</span></td>
+  <td><strong>userextend find_* 函数合并</strong></td>
+  <td>userextend.c</td>
+  <td>低</td>
+  <td>低</td>
+</tr>
+<tr>
+  <td><span class="badge badge-ok">P2</span></td>
+  <td><strong>rc_process_segment 空实现清理</strong></td>
+  <td>radiuscompensation.c</td>
+  <td>无</td>
+  <td>低 — 消除误导</td>
+</tr>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2>五、总体评价</h2>
+<!-- ============================================================ -->
+
+<div class="section-card">
+<h3>代码质量总评</h3>
+
+<table>
+<tr><th>维度</th><th>评分</th><th>评语</th></tr>
+<tr><td><strong>层次分离</strong></td><td><span class="badge badge-ok">⭐⭐⭐⭐</span></td><td>gparse(顶层解析)→gcode(底层执行)→L3(运动控制) 的依赖方向清晰，gcode不依赖gparse，值得肯定</td></tr>
+<tr><td><strong>模块独立性</strong></td><td><span class="badge badge-warn">⭐⭐⭐</span></td><td>各模块有独立.h/.c，但通过 chan[ch] 全局结构的耦合仍然较重</td></tr>
+<tr><td><strong>多通道支持</strong></td><td><span class="badge badge-ok">⭐⭐⭐⭐</span></td><td>几乎所有模块都实现了 ch 参数 + N_CHANNEL 状态数组，tooltipcomp 是唯一例外</td></tr>
+<tr><td><strong>代码可读性</strong></td><td><span class="badge badge-warn">⭐⭐⭐</span></td><td>注释详尽（中文+英文），但巨型函数降低可读性</td></tr>
+<tr><td><strong>扩展性</strong></td><td><span class="badge badge-err">⭐⭐</span></td><td>新增G/M代码必须修改核心if-else链；userextend的回调注册机制是已有亮点</td></tr>
+<tr><td><strong>一致性</strong></td><td><span class="badge badge-warn">⭐⭐⭐</span></td><td>各模块 init/enable/disable/is_enabled 模式基本一致，但细节差异较多</td></tr>
+<tr><td><strong>嵌入式适配</strong></td><td><span class="badge badge-ok">⭐⭐⭐⭐</span></td><td>结构体显式4字节对齐、静态buffer避免malloc、const 常量表等嵌入式优化到位</td></tr>
+</table>
+
+<h3>亮点</h3>
+<ul>
+<li>✅ gcode.c 统一运动分发 + 静态辅助函数的架构是好的</li>
+<li>✅ gcode.c 封装了主轴/冷却液接口 (gc_spindle_set_state/gc_coolant_set_state)，消除 decoder 对 motionctrl 的跨层直接依赖</li>
+<li>✅ gmcodedef.h 统一错误码体系 (0x0000-0x09FF 分段) 设计合理</li>
+<li>✅ radiuscompensation 的"add → process → get_next" 管道模式设计优雅</li>
+<li>✅ userextend 的回调注册机制是策略模式的雏形</li>
+<li>✅ 注释质量高，每个文件都有完整的 @file/@brief/@note/@todo</li>
+</ul>
+
+<h3>核心痛点</h3>
+<ul>
+<li>🔴 gc_update_modal() 140行 if-else 链条 — 必须优先整改</li>
+<li>🔴 gc_execute_line() 130行单函数承担7种职责</li>
+<li>🟡 各模块通过 chan[ch].dcd.ptr_gc_state-> 直接穿透访问4层结构体</li>
+<li>🟡 subprog 和 macroprog 约60%代码重复</li>
+</ul>
+</div>
+
+</body>
+</html>
